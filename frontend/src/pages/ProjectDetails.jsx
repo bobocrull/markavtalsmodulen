@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
 import MapWidget from '../components/MapWidget';
 import { ArrowLeft, UserPlus, Trash2, FileText, Upload, Plus, Users, Layout, Shield, FileCheck, Layers, ClipboardList, Info, FileSpreadsheet } from 'lucide-react';
 
@@ -78,7 +79,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
 
   const fetchProjectData = async () => {
     try {
-      const projRes = await fetch(`http://localhost:5000/api/projects/${projectId}`, {
+      const projRes = await fetch(`${API_BASE_URL}/api/projects/${projectId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!projRes.ok) throw new Error('Kunde inte hämta projektinfo.');
@@ -86,13 +87,13 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
       setProject(projData);
       setRouteCoords(projData.route_coordinates ? JSON.parse(projData.route_coordinates) : []);
 
-      const ownersRes = await fetch(`http://localhost:5000/api/projects/${projectId}/landowners`, {
+      const ownersRes = await fetch(`${API_BASE_URL}/api/projects/${projectId}/landowners`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const ownersData = await ownersRes.json();
       
       const ownersWithCoords = await Promise.all(ownersData.map(async (owner) => {
-        const detailRes = await fetch(`http://localhost:5000/api/landowners/${owner.id}`, {
+        const detailRes = await fetch(`${API_BASE_URL}/api/landowners/${owner.id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const detail = await detailRes.json();
@@ -106,13 +107,13 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
       }));
       setLandowners(ownersWithCoords);
 
-      const collRes = await fetch(`http://localhost:5000/api/projects/${projectId}/collaborators`, {
+      const collRes = await fetch(`${API_BASE_URL}/api/projects/${projectId}/collaborators`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const collData = await collRes.json();
       setCollaborators(collData);
 
-      const docsRes = await fetch(`http://localhost:5000/api/projects/${projectId}/documents`, {
+      const docsRes = await fetch(`${API_BASE_URL}/api/projects/${projectId}/documents`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const allDocs = await docsRes.json();
@@ -195,7 +196,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
 
   const handleSaveRoute = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/projects/${projectId}/route`, {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${projectId}/route`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -217,7 +218,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
 
   const fetchAllUsers = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/users', {
+      const res = await fetch(`${API_BASE_URL}/api/users`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
@@ -231,7 +232,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
     e.preventDefault();
     if (!selectedUser) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/projects/${projectId}/collaborators`, {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${projectId}/collaborators`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -253,7 +254,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
   const handleRemoveCollaborator = async (userId) => {
     if (!confirm('Är du säker på att du vill ta bort beredaren från projektet?')) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/projects/${projectId}/collaborators/${userId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${projectId}/collaborators/${userId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -271,7 +272,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
     formData.append('logo', logoFile);
 
     try {
-      const res = await fetch(`http://localhost:5000/api/projects/${projectId}/logo`, {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${projectId}/logo`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData
@@ -289,7 +290,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
   const handleAddLandowner = async (e) => {
     e.preventDefault();
     try {
-      const ownerRes = await fetch(`http://localhost:5000/api/projects/${projectId}/landowners`, {
+      const ownerRes = await fetch(`${API_BASE_URL}/api/projects/${projectId}/landowners`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -309,7 +310,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
       const landownerId = ownerData.id;
 
       if (newOwnerPropDesignation) {
-        await fetch(`http://localhost:5000/api/landowners/${landownerId}/properties`, {
+        await fetch(`${API_BASE_URL}/api/landowners/${landownerId}/properties`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -354,7 +355,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
     formData.append('property_designation', uploadPropertyDesignation);
 
     try {
-      const res = await fetch(`http://localhost:5000/api/projects/${projectId}/documents`, {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${projectId}/documents`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData
@@ -374,7 +375,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
 
   const handleToggleShipping = async (docId) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/documents/${docId}/toggle-shipping`, {
+      const res = await fetch(`${API_BASE_URL}/api/documents/${docId}/toggle-shipping`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -387,7 +388,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
   const handleDeleteDoc = async (docId) => {
     if (!confirm('Vill du ta bort detta projektdokument?')) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/documents/${docId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/documents/${docId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -402,7 +403,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
     if (!confirm(`Är du säker på att du vill boka PostNord-utskick för ${selectedOwners.length} markägare?`)) return;
 
     try {
-      const res = await fetch(`http://localhost:5000/api/projects/${projectId}/mass-ship`, {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${projectId}/mass-ship`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -430,7 +431,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
     if (!confirm(`Vill du generera en ISO 20022 utbetalningsfil (pain.001 XML) för ${selectedOwners.length} markägare? Statusen på dessa markägare kommer att uppdateras till Utbetalt.`)) return;
 
     try {
-      const res = await fetch(`http://localhost:5000/api/projects/${projectId}/generate-payment-file`, {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${projectId}/generate-payment-file`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -565,7 +566,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
         <div className="card" style={{ padding: '0.8rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
           {project.logo_path ? (
             <img 
-              src={`http://localhost:5000${project.logo_path}`} 
+              src={`${API_BASE_URL}${project.logo_path}`} 
               alt="Projektlogotyp" 
               style={{ maxHeight: '40px', maxWidth: '100px', borderRadius: '4px' }}
             />

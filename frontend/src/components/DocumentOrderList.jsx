@@ -1,4 +1,5 @@
 import React from 'react';
+import { API_BASE_URL } from '../config';
 import { ArrowUp, ArrowDown, FileText, Trash2, CheckSquare, Square } from 'lucide-react';
 
 function DocumentOrderList({ documents, token, onOrderChanged, onDeleteDocument }) {
@@ -18,7 +19,7 @@ function DocumentOrderList({ documents, token, onOrderChanged, onDeleteDocument 
     try {
       await Promise.all(
         newDocs.map((doc, idx) => 
-          fetch(`http://localhost:5000/api/documents/${doc.id}/order`, {
+          fetch(`${API_BASE_URL}/api/documents/${doc.id}/order`, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
@@ -37,7 +38,7 @@ function DocumentOrderList({ documents, token, onOrderChanged, onDeleteDocument 
 
   const handleToggleShipping = async (docId) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/documents/${docId}/toggle-shipping`, {
+      const res = await fetch(`${API_BASE_URL}/api/documents/${docId}/toggle-shipping`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}` }
       });

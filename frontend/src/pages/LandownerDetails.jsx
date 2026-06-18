@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
 import DocumentOrderList from '../components/DocumentOrderList';
 import { ArrowLeft, Save, Upload, FileText, Send, ShieldAlert, Plus, Trash2, ExternalLink, Edit2, Check, AlertCircle } from 'lucide-react';
 
@@ -94,13 +95,13 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
 
   const fetchProjectProperties = async (projId) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/projects/${projId}/landowners`, {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${projId}/landowners`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const ownersData = await res.json();
       const propsMap = new Map();
       await Promise.all(ownersData.map(async (owner) => {
-        const detailRes = await fetch(`http://localhost:5000/api/landowners/${owner.id}`, {
+        const detailRes = await fetch(`${API_BASE_URL}/api/landowners/${owner.id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const detail = await detailRes.json();
@@ -120,7 +121,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
 
   const fetchOwnerDetails = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/landowners/${landownerId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/landowners/${landownerId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Kunde inte läsa markägare.');
@@ -206,7 +207,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
 
   const fetchDocuments = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/landowners/${landownerId}/documents`, {
+      const res = await fetch(`${API_BASE_URL}/api/landowners/${landownerId}/documents`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
@@ -219,7 +220,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
   const handleUpdateOwner = async (e) => {
     if (e) e.preventDefault();
     try {
-      const res = await fetch(`http://localhost:5000/api/landowners/${landownerId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/landowners/${landownerId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -259,7 +260,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
     }
 
     try {
-      const res = await fetch(`http://localhost:5000/api/landowners/${landownerId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/landowners/${landownerId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -295,7 +296,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
 
     try {
       // 1. Post the communication log
-      const logRes = await fetch(`http://localhost:5000/api/landowners/${landownerId}/communication-logs`, {
+      const logRes = await fetch(`${API_BASE_URL}/api/landowners/${landownerId}/communication-logs`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -314,7 +315,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
       }
 
       // 2. Update status to 'delivered'
-      const statusRes = await fetch(`http://localhost:5000/api/landowners/${landownerId}`, {
+      const statusRes = await fetch(`${API_BASE_URL}/api/landowners/${landownerId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -350,7 +351,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
     if (!newPropDesignation) return;
 
     try {
-      const res = await fetch(`http://localhost:5000/api/landowners/${landownerId}/properties`, {
+      const res = await fetch(`${API_BASE_URL}/api/landowners/${landownerId}/properties`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -378,7 +379,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
   const handleDeleteProperty = async (propId) => {
     if (!confirm('Vill du ta bort fastigheten?')) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/properties/${propId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/properties/${propId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -391,7 +392,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
   const handleUpdateValuation = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch(`http://localhost:5000/api/landowners/${landownerId}/valuation`, {
+      const res = await fetch(`${API_BASE_URL}/api/landowners/${landownerId}/valuation`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -419,7 +420,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
     formData.append('file', valFile);
 
     try {
-      const res = await fetch(`http://localhost:5000/api/landowners/${landownerId}/valuation/file`, {
+      const res = await fetch(`${API_BASE_URL}/api/landowners/${landownerId}/valuation/file`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData
@@ -446,7 +447,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
     formData.append('target_send_date', targetSendDate);
 
     try {
-      const res = await fetch(`http://localhost:5000/api/landowners/${landownerId}/documents`, {
+      const res = await fetch(`${API_BASE_URL}/api/landowners/${landownerId}/documents`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData
@@ -466,7 +467,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
 
   const handleDeleteDocument = async (docId) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/documents/${docId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/documents/${docId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -477,12 +478,12 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
   };
 
   const handleCompilePdf = () => {
-    window.open(`http://localhost:5000/api/landowners/${landownerId}/compile?authorization=Bearer ${token}`, '_blank');
+    window.open(`${API_BASE_URL}/api/landowners/${landownerId}/compile?authorization=Bearer ${token}`, '_blank');
   };
 
   const handlePostnordShipping = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/landowners/${landownerId}/ship`, {
+      const res = await fetch(`${API_BASE_URL}/api/landowners/${landownerId}/ship`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -508,7 +509,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
   const handleGdprPurge = async () => {
     if (!confirm('VARNING: Är du helt säker på att du vill utföra GDPR-gallring? Alla personuppgifter kommer att maskeras och uppladdade dokument raderas permanent. Denna åtgärd kan inte ångras.')) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/landowners/${landownerId}/gdpr-purge`, {
+      const res = await fetch(`${API_BASE_URL}/api/landowners/${landownerId}/gdpr-purge`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -524,7 +525,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
 
   const fetchCrmLogs = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/landowners/${landownerId}/communication-logs`, {
+      const res = await fetch(`${API_BASE_URL}/api/landowners/${landownerId}/communication-logs`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -538,7 +539,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
 
   const fetchObligations = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/landowners/${landownerId}/obligations`, {
+      const res = await fetch(`${API_BASE_URL}/api/landowners/${landownerId}/obligations`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -554,7 +555,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
     e.preventDefault();
     if (!newObligationTitle) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/landowners/${landownerId}/obligations`, {
+      const res = await fetch(`${API_BASE_URL}/api/landowners/${landownerId}/obligations`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -582,7 +583,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
     const ob = obligations.find(o => o.id === obId);
     if (!ob) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/obligations/${obId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/obligations/${obId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -606,7 +607,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
   const handleDeleteObligation = async (obId) => {
     if (!confirm('Är du säker på att du vill ta bort detta åtagande?')) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/obligations/${obId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/obligations/${obId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -622,7 +623,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
     e.preventDefault();
     if (!newLogSummary) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/landowners/${landownerId}/communication-logs`, {
+      const res = await fetch(`${API_BASE_URL}/api/landowners/${landownerId}/communication-logs`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -721,7 +722,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
     };
     
     try {
-      const res = await fetch(`http://localhost:5000/api/landowners/${landownerId}/valuation-calculator`, {
+      const res = await fetch(`${API_BASE_URL}/api/landowners/${landownerId}/valuation-calculator`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -880,7 +881,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
                     <a href={shipments[0].tracking_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-accent)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
                       Spåra paket <ExternalLink size={10} />
                     </a>
-                    <a href={`http://localhost:5000${shipments[0].shipping_label_url}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-accent)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                    <a href={`${API_BASE_URL}${shipments[0].shipping_label_url}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-accent)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
                       Fraktsedel <ExternalLink size={10} />
                     </a>
                   </div>
@@ -1474,7 +1475,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--bg-primary)', padding: '0.5rem', borderRadius: '4px', fontSize: '0.8rem', marginBottom: '0.75rem' }}>
                   <FileText size={14} style={{ color: 'var(--color-success)' }} />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>varderingskalkyl.xlsx</span>
-                  <a href={`http://localhost:5000${owner.valuation.file_path}`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm" style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem', marginLeft: 'auto', textTransform: 'none' }}>
+                  <a href={`${API_BASE_URL}${owner.valuation.file_path}`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm" style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem', marginLeft: 'auto', textTransform: 'none' }}>
                     Öppna
                   </a>
                 </div>

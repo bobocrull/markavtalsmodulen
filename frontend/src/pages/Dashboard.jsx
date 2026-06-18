@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
 import { FolderPlus, FileText, Compass, Inbox, ShieldAlert, Check, RefreshCw, Layers, ArrowRight } from 'lucide-react';
 
 function Dashboard({ 
@@ -121,7 +122,7 @@ function Dashboard({
 
   const fetchProjects = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/projects', {
+      const res = await fetch(`${API_BASE_URL}/api/projects`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -132,7 +133,7 @@ function Dashboard({
       }
 
       // Hämta dashboard-statistik
-      const statsRes = await fetch('http://localhost:5000/api/dashboard/stats', {
+      const statsRes = await fetch(`${API_BASE_URL}/api/dashboard/stats`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (statsRes.ok) {
@@ -151,7 +152,7 @@ function Dashboard({
     setError('');
 
     try {
-      const res = await fetch('http://localhost:5000/api/projects', {
+      const res = await fetch(`${API_BASE_URL}/api/projects`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

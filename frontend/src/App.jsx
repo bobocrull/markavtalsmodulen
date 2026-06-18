@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from './config';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ProjectDetails from './pages/ProjectDetails';
@@ -49,7 +50,7 @@ function App() {
 
   const fetchProfile = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/auth/me', {
+      const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -97,7 +98,7 @@ function App() {
 
   const fetchAllLandowners = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/projects', {
+      const res = await fetch(`${API_BASE_URL}/api/projects`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!res.ok) return;
@@ -105,7 +106,7 @@ function App() {
       
       let loadedOwners = [];
       for (const p of projectsData) {
-        const ownersRes = await fetch(`http://localhost:5000/api/projects/${p.id}/landowners`, {
+        const ownersRes = await fetch(`${API_BASE_URL}/api/projects/${p.id}/landowners`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (ownersRes.ok) {
@@ -194,7 +195,7 @@ function App() {
       formData.append('doc_type', 'agreement');
       formData.append('requires_shipping', '0');
 
-      const res = await fetch(`http://localhost:5000/api/landowners/${selectedOwner.id}/documents`, {
+      const res = await fetch(`${API_BASE_URL}/api/landowners/${selectedOwner.id}/documents`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`
@@ -232,7 +233,7 @@ function App() {
   // Globala handlers för Inbox och GDPR (synkade mot DB)
   const handleMatchInbox = async (name) => {
     try {
-      const projRes = await fetch('http://localhost:5000/api/projects', {
+      const projRes = await fetch(`${API_BASE_URL}/api/projects`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!projRes.ok) return;
@@ -240,7 +241,7 @@ function App() {
       
       let foundOwner = null;
       for (const p of projs) {
-        const ownersRes = await fetch(`http://localhost:5000/api/projects/${p.id}/landowners`, {
+        const ownersRes = await fetch(`${API_BASE_URL}/api/projects/${p.id}/landowners`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (ownersRes.ok) {
@@ -254,7 +255,7 @@ function App() {
       }
 
       if (foundOwner) {
-        const updateRes = await fetch(`http://localhost:5000/api/landowners/${foundOwner.id}`, {
+        const updateRes = await fetch(`${API_BASE_URL}/api/landowners/${foundOwner.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -289,7 +290,7 @@ function App() {
 
   const handleGdprPurgeByName = async (name) => {
     try {
-      const projRes = await fetch('http://localhost:5000/api/projects', {
+      const projRes = await fetch(`${API_BASE_URL}/api/projects`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!projRes.ok) return;
@@ -297,7 +298,7 @@ function App() {
       
       let foundOwner = null;
       for (const p of projs) {
-        const ownersRes = await fetch(`http://localhost:5000/api/projects/${p.id}/landowners`, {
+        const ownersRes = await fetch(`${API_BASE_URL}/api/projects/${p.id}/landowners`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (ownersRes.ok) {
@@ -311,7 +312,7 @@ function App() {
       }
 
       if (foundOwner) {
-        const res = await fetch(`http://localhost:5000/api/landowners/${foundOwner.id}/gdpr-purge`, {
+        const res = await fetch(`${API_BASE_URL}/api/landowners/${foundOwner.id}/gdpr-purge`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` }
         });
