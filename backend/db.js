@@ -1,4 +1,3 @@
-const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
@@ -16,6 +15,7 @@ if (isPostgres) {
     ssl: { rejectUnauthorized: false }
   });
 } else {
+  const sqlite3 = require('sqlite3').verbose();
   console.log('Ansluter till lokal SQLite-databas...');
   const dbPath = path.resolve(__dirname, 'database.sqlite');
   sqliteDb = new sqlite3.Database(dbPath, (err) => {
