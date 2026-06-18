@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Environment secrets
+.env
+.env.local
+
+# Database
+*.sqlite
+*.db
+
+# Uploaded documents
+uploads/
+backend/uploads/
+
+# Build outputs
+dist/
