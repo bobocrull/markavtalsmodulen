@@ -1370,7 +1370,11 @@ process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception kastad:', error);
 });
 
-app.listen(PORT, async () => {
-  await ensureMockPdfFiles();
-  console.log(`Server körs på port ${PORT}`);
-});
+if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
+  app.listen(PORT, async () => {
+    await ensureMockPdfFiles();
+    console.log(`Server körs på port ${PORT}`);
+  });
+}
+
+module.exports = app;
