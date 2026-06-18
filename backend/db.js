@@ -1,16 +1,138 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const bcrypt = require('bcryptjs');
+const { Pool } = require('pg');
 
-const dbPath = path.resolve(__dirname, 'database.sqlite');
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
-    console.error('Kunde inte ansluta till SQLite-databasen:', err.message);
-  } else {
-    console.log('Ansluten till SQLite-databasen.');
-    initializeDatabase();
+const databaseUrl = process.env.DATABASE_URL;
+const isPostgres = !!databaseUrl;
+
+let pgPool = null;
+let sqliteDb = null;
+
+if (isPostgres) {
+  console.log('Ansluter till PostgreSQL-databas (Supabase)...');
+  pgPool = new Pool({
+    connectionString: databaseUrl,
+    ssl: { rejectUnauthorized: false }
+  });
+} else {
+  console.log('Ansluter till lokal SQLite-databas...');
+  const dbPath = path.resolve(__dirname, 'database.sqlite');
+  sqliteDb = new sqlite3.Database(dbPath, (err) => {
+    if (err) {
+      console.error('Kunde inte ansluta till SQLite-databasen:', err.message);
+    } else {
+      console.log('Ansluten till SQLite-databasen.');
+      initializeDatabase();
+    }
+  });
+}
+
+// Helper to translate query placeholders and append RETURNING id on INSERT
+function convertSql(sql) {
+  let pgSql = sql;
+  let index = 1;
+  pgSql = pgSql.replace(/\?/g, () => `$${index++}`);
+
+  const trimmed = pgSql.trim().toUpperCase();
+  if (trimmed.startsWith('INSERT') && !trimmed.includes('RETURNING')) {
+    pgSql += ' RETURNING id';
   }
-});
+  return pgSql;
+}
+
+// Helper to translate SQLite CREATE table statements to PostgreSQL
+function translateCreateQuery(sql) {
+  return sql
+    .replace(/INTEGER PRIMARY KEY AUTOINCREMENT/gi, 'SERIAL PRIMARY KEY')
+    .replace(/DATETIME DEFAULT CURRENT_TIMESTAMP/gi, 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+    .replace(/DATETIME/gi, 'TIMESTAMP')
+    .replace(/REAL/gi, 'DOUBLE PRECISION')
+    .replace(/BLOB/gi, 'BYTEA');
+}
+
+const db = {
+  run(sql, params, callback) {
+    if (typeof params === 'function') {
+      callback = params;
+      params = [];
+    }
+    if (!callback) callback = () => {};
+
+    if (isPostgres) {
+      const pgSql = convertSql(translateCreateQuery(sql));
+      pgPool.query(pgSql, params, (err, res) => {
+        if (err) {
+          callback(err);
+        } else {
+          const context = {
+            lastID: res.rows && res.rows[0] ? res.rows[0].id : null,
+            changes: res.rowCount
+          };
+          callback.call(context, null);
+        }
+      });
+    } else {
+      sqliteDb.run(sql, params, callback);
+    }
+  },
+
+  get(sql, params, callback) {
+    if (typeof params === 'function') {
+      callback = params;
+      params = [];
+    }
+    if (!callback) callback = () => {};
+
+    if (isPostgres) {
+      const pgSql = convertSql(sql);
+      pgPool.query(pgSql, params, (err, res) => {
+        if (err) {
+          callback(err);
+        } else {
+          callback(null, res.rows && res.rows[0] ? res.rows[0] : null);
+        }
+      });
+    } else {
+      sqliteDb.get(sql, params, callback);
+    }
+  },
+
+  all(sql, params, callback) {
+    if (typeof params === 'function') {
+      callback = params;
+      params = [];
+    }
+    if (!callback) callback = () => {};
+
+    if (isPostgres) {
+      const pgSql = convertSql(sql);
+      pgPool.query(pgSql, params, (err, res) => {
+        if (err) {
+          callback(err);
+        } else {
+          callback(null, res.rows || []);
+        }
+      });
+    } else {
+      sqliteDb.all(sql, params, callback);
+    }
+  },
+
+  serialize(callback) {
+    if (isPostgres) {
+      callback();
+    } else {
+      sqliteDb.serialize(callback);
+    }
+  }
+};
+
+// Initialize database schema
+if (isPostgres) {
+  // Wait a moment for pool to be ready, then initialize
+  initializeDatabase();
+}
 
 function initializeDatabase() {
   db.serialize(() => {
@@ -36,6 +158,7 @@ function initializeDatabase() {
         center_latitude REAL,
         center_longitude REAL,
         zoom_level INTEGER DEFAULT 12,
+        route_coordinates TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -78,6 +201,7 @@ function initializeDatabase() {
         valuation_text TEXT,
         compensation_sum REAL DEFAULT 0,
         file_path TEXT,
+        calculator_data TEXT,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (landowner_id) REFERENCES landowners(id) ON DELETE CASCADE
@@ -116,17 +240,21 @@ function initializeDatabase() {
       )
     `);
 
-    db.run("ALTER TABLE documents ADD COLUMN property_designation TEXT", (err) => {
-      // Ignorera om kolumnen redan finns
-    });
+    // In PostgreSQL, ALTER TABLE queries will throw an error if the column already exists.
+    // We run them but ignore the error if it fails since the column already exists or is initialized in table definitions.
+    if (!isPostgres) {
+      db.run("ALTER TABLE documents ADD COLUMN property_designation TEXT", (err) => {
+        // Ignorera om kolumnen redan finns
+      });
 
-    db.run("ALTER TABLE projects ADD COLUMN route_coordinates TEXT", (err) => {
-      // Ignorera om kolumnen redan finns
-    });
+      db.run("ALTER TABLE projects ADD COLUMN route_coordinates TEXT", (err) => {
+        // Ignorera om kolumnen redan finns
+      });
 
-    db.run("ALTER TABLE land_valuations ADD COLUMN calculator_data TEXT", (err) => {
-      // Ignorera om kolumnen redan finns
-    });
+      db.run("ALTER TABLE land_valuations ADD COLUMN calculator_data TEXT", (err) => {
+        // Ignorera om kolumnen redan finns
+      });
+    }
 
     db.run(`
       CREATE TABLE IF NOT EXISTS communication_logs (
@@ -187,7 +315,7 @@ function initializeDatabase() {
         console.error("Kunde inte kontrollera users-tabellen:", err.message);
         return;
       }
-      if (row.count === 0) {
+      if (row && (row.count == 0 || parseInt(row.count) === 0)) {
         seedUsers();
       } else {
         console.log("Databasen är redan populerad med användare.");
