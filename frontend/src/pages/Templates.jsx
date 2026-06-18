@@ -7,7 +7,7 @@ function Templates() {
       id: 1,
       customer: 'E.ON Energidistribution',
       title: 'E.ON Markupplåtelseavtal v4',
-      workflow: ['DRAFT', 'QUEUED', 'SENT', 'RECEIVED', 'SIGNED', 'PAID', 'REGISTERED', 'ARCHIVED', 'REDACTED'],
+      workflow: ['DRAFT', 'QUEUED', 'SENT', 'RECEIVED', 'SIGNED', 'PAID', 'REGISTERED', 'DELIVERED', 'ARCHIVED', 'REDACTED'],
       mappings: [
         { tag: '{{markägare.namn}}', dbField: 'landowners.name' },
         { tag: '{{markägare.personnummer}}', dbField: 'landowners.personal_number' },
@@ -21,7 +21,7 @@ function Templates() {
       id: 2,
       customer: 'Vattenfall Eldistribution',
       title: 'Vattenfall Lokalnät, mall 2025',
-      workflow: ['DRAFT', 'QUEUED', 'SENT', 'RECEIVED', 'SIGNED', 'PAID', 'ARCHIVED', 'REDACTED'],
+      workflow: ['DRAFT', 'QUEUED', 'SENT', 'RECEIVED', 'SIGNED', 'PAID', 'DELIVERED', 'ARCHIVED', 'REDACTED'],
       mappings: [
         { tag: '{{markägare.namn}}', dbField: 'landowners.name' },
         { tag: '{{fastighet.beteckning}}', dbField: 'properties.designation' },
@@ -33,7 +33,7 @@ function Templates() {
       id: 3,
       customer: 'Ellevio',
       title: 'Ellevio Servitut, v2',
-      workflow: ['DRAFT', 'QUEUED', 'SENT', 'RECEIVED', 'SIGNED', 'PAID', 'REGISTERED', 'ARCHIVED', 'REDACTED'],
+      workflow: ['DRAFT', 'QUEUED', 'SENT', 'RECEIVED', 'SIGNED', 'PAID', 'REGISTERED', 'DELIVERED', 'ARCHIVED', 'REDACTED'],
       mappings: [
         { tag: '{{markägare.namn}}', dbField: 'landowners.name' },
         { tag: '{{markägare.personnummer}}', dbField: 'landowners.personal_number' },
@@ -51,8 +51,8 @@ function Templates() {
   const [newCustomer, setNewCustomer] = useState('');
   const [newTitle, setNewTitle] = useState('');
   const [newText, setNewText] = useState('');
-  const [selectedWorkflow, setSelectedWorkflow] = useState(['DRAFT', 'QUEUED', 'SENT', 'RECEIVED', 'SIGNED', 'PAID', 'ARCHIVED']);
-  const availableStages = ['DRAFT', 'QUEUED', 'SENT', 'RECEIVED', 'SIGNED', 'PAID', 'REGISTERED', 'ARCHIVED', 'REDACTED'];
+  const [selectedWorkflow, setSelectedWorkflow] = useState(['DRAFT', 'QUEUED', 'SENT', 'RECEIVED', 'SIGNED', 'PAID', 'DELIVERED', 'ARCHIVED']);
+  const availableStages = ['DRAFT', 'QUEUED', 'SENT', 'RECEIVED', 'SIGNED', 'PAID', 'REGISTERED', 'DELIVERED', 'ARCHIVED', 'REDACTED'];
 
   // Tillstånd för redigering av fältmappning
   const [editingMappings, setEditingMappings] = useState([]);
@@ -115,7 +115,7 @@ function Templates() {
     setNewCustomer('');
     setNewTitle('');
     setNewText('');
-    setSelectedWorkflow(['DRAFT', 'QUEUED', 'SENT', 'RECEIVED', 'SIGNED', 'PAID', 'ARCHIVED']);
+    setSelectedWorkflow(['DRAFT', 'QUEUED', 'SENT', 'RECEIVED', 'SIGNED', 'PAID', 'DELIVERED', 'ARCHIVED']);
     setActiveModal(null);
     alert(`Avtalsmallen för ${newCustomer} har skapats!`);
   };

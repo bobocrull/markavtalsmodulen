@@ -36,7 +36,7 @@ function Dashboard({
 
   const renderStatusSummary = (project) => {
     const parts = [];
-    const done = (project.signed_count || 0) + (project.paid_count || 0) + (project.easement_count || 0) + (project.archived_count || 0);
+    const done = (project.signed_count || 0) + (project.paid_count || 0) + (project.easement_count || 0) + (project.delivered_count || 0) + (project.archived_count || 0);
     const sent = (project.posted_count || 0) + (project.received_count || 0);
     const queued = project.queued_count || 0;
     const draft = project.draft_count || 0;

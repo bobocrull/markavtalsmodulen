@@ -482,6 +482,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
       signed: 'badge-signed',
       paid: 'badge-signed',
       easement: 'badge-completed',
+      delivered: 'badge-completed',
       archived: 'badge-completed'
     };
     return classes[status] || 'badge-draft';
@@ -496,6 +497,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
       signed: 'Signerat',
       paid: 'Utbetalt',
       easement: 'Servitut',
+      delivered: 'Överlämnat',
       archived: 'Arkiverat'
     };
     return labels[status] || status;
@@ -680,7 +682,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem' }}>
                 <div 
                   className="card" 
                   onClick={() => setStatusFilter(statusFilter === 'signed' ? '' : 'signed')} 
@@ -731,6 +733,21 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
                 </div>
                 <div 
                   className="card" 
+                  onClick={() => setStatusFilter(statusFilter === 'delivered' ? '' : 'delivered')} 
+                  style={{ 
+                    padding: '0.85rem', 
+                    textAlign: 'center', 
+                    cursor: 'pointer', 
+                    transition: 'all 0.2s',
+                    border: statusFilter === 'delivered' ? '1px solid var(--color-accent)' : '1px solid var(--glass-border)',
+                    boxShadow: statusFilter === 'delivered' ? '0 0 10px rgba(95, 200, 145, 0.2)' : 'none'
+                  }}
+                >
+                  <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-title)' }}>8. ÖVERLÄMNAT</p>
+                  <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'white', margin: '0.25rem 0' }}>{getStatusCount('delivered')}</p>
+                </div>
+                <div 
+                  className="card" 
                   onClick={() => setStatusFilter(statusFilter === 'archived' ? '' : 'archived')} 
                   style={{ 
                     padding: '0.85rem', 
@@ -741,7 +758,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
                     boxShadow: statusFilter === 'archived' ? '0 0 10px rgba(95, 200, 145, 0.2)' : 'none'
                   }}
                 >
-                  <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-title)' }}>8. ARKIVERAT</p>
+                  <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-title)' }}>9. ARKIVERAT</p>
                   <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'white', margin: '0.25rem 0' }}>{getStatusCount('archived')}</p>
                 </div>
               </div>

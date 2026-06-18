@@ -718,6 +718,7 @@ function App() {
         {currentView === 'landowner' && (
           <LandownerDetails 
             token={token} 
+            user={user}
             landownerId={activeLandownerId} 
             navigateToProject={() => navigateToProject(activeProjectId)}
           />

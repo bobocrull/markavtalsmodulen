@@ -306,7 +306,7 @@ app.get('/api/projects', authenticateToken, (req, res) => {
   const query = `
     SELECT p.*,
       (SELECT COUNT(*) FROM landowners WHERE project_id = p.id) as total_landowners,
-      (SELECT COUNT(*) FROM landowners WHERE project_id = p.id AND status IN ('signed', 'paid', 'easement', 'archived')) as signed_landowners,
+      (SELECT COUNT(*) FROM landowners WHERE project_id = p.id AND status IN ('signed', 'paid', 'easement', 'delivered', 'archived')) as signed_landowners,
       (SELECT COUNT(*) FROM landowners WHERE project_id = p.id AND status = 'draft') as draft_count,
       (SELECT COUNT(*) FROM landowners WHERE project_id = p.id AND status = 'queued') as queued_count,
       (SELECT COUNT(*) FROM landowners WHERE project_id = p.id AND status = 'posted') as posted_count,
@@ -314,6 +314,7 @@ app.get('/api/projects', authenticateToken, (req, res) => {
       (SELECT COUNT(*) FROM landowners WHERE project_id = p.id AND status = 'signed') as signed_count,
       (SELECT COUNT(*) FROM landowners WHERE project_id = p.id AND status = 'paid') as paid_count,
       (SELECT COUNT(*) FROM landowners WHERE project_id = p.id AND status = 'easement') as easement_count,
+      (SELECT COUNT(*) FROM landowners WHERE project_id = p.id AND status = 'delivered') as delivered_count,
       (SELECT COUNT(*) FROM landowners WHERE project_id = p.id AND status = 'archived') as archived_count
     FROM projects p
     ORDER BY p.created_at DESC

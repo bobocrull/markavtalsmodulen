@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import DocumentOrderList from '../components/DocumentOrderList';
 import { ArrowLeft, Save, Upload, FileText, Send, ShieldAlert, Plus, Trash2, ExternalLink, Edit2, Check, AlertCircle } from 'lucide-react';
 
-function LandownerDetails({ token, landownerId, navigateToProject }) {
+function LandownerDetails({ token, landownerId, navigateToProject, user }) {
   const [owner, setOwner] = useState(null);
   const [properties, setProperties] = useState([]);
   const [documents, setDocuments] = useState([]);
@@ -72,6 +72,18 @@ function LandownerDetails({ token, landownerId, navigateToProject }) {
 
   // Kivra mock state
   const [kivraStatus, setKivraStatus] = useState('Ej skickat');
+
+  // Handover state variables
+  const [handoverRecipient, setHandoverRecipient] = useState('');
+  const [handoverDate, setHandoverDate] = useState(new Date().toISOString().split('T')[0]);
+  const [handoverConfirmed, setHandoverConfirmed] = useState(false);
+  const [handoverSignName, setHandoverSignName] = useState(user?.username || '');
+
+  useEffect(() => {
+    if (user?.username) {
+      setHandoverSignName(user.username);
+    }
+  }, [user]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -236,6 +248,16 @@ function LandownerDetails({ token, landownerId, navigateToProject }) {
 
   const handleStatusChange = async (newStatus) => {
     if (isPurged) return;
+
+    if (newStatus === 'delivered') {
+      alert('Vänligen använd överlämningsformuläret till höger för att formellt signera och registrera överlämning till kund.');
+      return;
+    }
+    if (newStatus === 'archived' && status !== 'delivered' && status !== 'archived') {
+      alert('Ärendet måste överlämnas till kund (fas 8. Överlämnat) innan det kan arkiveras.');
+      return;
+    }
+
     try {
       const res = await fetch(`http://localhost:5000/api/landowners/${landownerId}`, {
         method: 'PUT',
@@ -261,6 +283,65 @@ function LandownerDetails({ token, landownerId, navigateToProject }) {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleRegisterHandover = async (e) => {
+    if (e) e.preventDefault();
+    if (!handoverRecipient || !handoverDate || !handoverConfirmed || !handoverSignName) {
+      alert('Vänligen fyll i alla fält och bekräfta överlämningen.');
+      return;
+    }
+
+    try {
+      // 1. Post the communication log
+      const logRes = await fetch(`http://localhost:5000/api/landowners/${landownerId}/communication-logs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          log_type: 'meeting',
+          summary: 'Dokumentation överlämnad till kund',
+          description: `Dokumentation (undertecknat avtal, EBR-värdering och GIS-kartor) har överlämnats formellt.\nMottagare hos kund: ${handoverRecipient}\nÖverlämnandedatum: ${handoverDate}\nSignerat digitalt av handläggare: ${handoverSignName}`
+        })
+      });
+
+      if (!logRes.ok) {
+        alert('Kunde inte logga överlämningen.');
+        return;
+      }
+
+      // 2. Update status to 'delivered'
+      const statusRes = await fetch(`http://localhost:5000/api/landowners/${landownerId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name,
+          personal_number: personalNumber,
+          address,
+          email,
+          phone,
+          bank_account: bankAccount,
+          status: 'delivered'
+        })
+      });
+
+      if (statusRes.ok) {
+        setStatus('delivered');
+        fetchOwnerDetails();
+        fetchCrmLogs();
+        alert('Överlämning till kund har registrerats och status har uppdaterats till Överlämnat.');
+      } else {
+        alert('Kunde inte uppdatera status.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Ett fel uppstod vid registrering av överlämningen.');
     }
   };
 
@@ -677,7 +758,8 @@ function LandownerDetails({ token, landownerId, navigateToProject }) {
     { key: 'signed', label: '5. Signerat', desc: 'Fysiskt signerat undertecknat original' },
     { key: 'paid', label: '6. Utbetalt', desc: 'Ersättning överförd till bank' },
     { key: 'easement', label: '7. Servitut', desc: 'Inskrivet hos Lantmäteriet' },
-    { key: 'archived', label: '8. Arkiverat', desc: 'Ärendet avslutat & gallring väntar' }
+    { key: 'delivered', label: '8. Överlämnat', desc: 'Överlämnat till kund' },
+    { key: 'archived', label: '9. Arkiverat', desc: 'Ärendet avslutat & gallring väntar' }
   ];
 
   // Hitta index för nuvarande status för att färglägga tidslinjen
@@ -1456,6 +1538,113 @@ function LandownerDetails({ token, landownerId, navigateToProject }) {
               <FileText size={16} /> Kompilera Avtalspaket (PDF)
             </button>
           </div>
+
+          {/* Formell överlämning till kund */}
+          {(status === 'easement' || status === 'delivered' || status === 'archived') && (
+            <div className="card" style={{ padding: '1.25rem' }}>
+              <h3 style={{ fontSize: '0.95rem', color: 'white', marginBottom: '1rem', fontFamily: 'var(--font-title)' }}>
+                Överlämning till kund
+              </h3>
+
+              {status === 'easement' ? (
+                <form onSubmit={handleRegisterHandover} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: '1.4', margin: 0 }}>
+                    Innan ärendet kan arkiveras måste dokumentationen (undertecknat avtal, EBR-värdering och GIS-kartor) formellt lämnas över till kunden.
+                  </p>
+                  
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.7rem', marginBottom: '0.25rem' }}>Mottagare hos kund (t.ex. E.ON projektledare)</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="Ange namn på mottagaren" 
+                      value={handoverRecipient} 
+                      onChange={(e) => setHandoverRecipient(e.target.value)} 
+                      required 
+                      style={{ padding: '0.4rem', fontSize: '0.8rem' }}
+                    />
+                  </div>
+
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.7rem', marginBottom: '0.25rem' }}>Överlämnandedatum</label>
+                    <input 
+                      type="date" 
+                      className="form-input" 
+                      value={handoverDate} 
+                      onChange={(e) => setHandoverDate(e.target.value)} 
+                      required 
+                      style={{ padding: '0.4rem', fontSize: '0.8rem' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'start', margin: '0.25rem 0' }}>
+                    <input 
+                      type="checkbox" 
+                      id="handover-confirm-check" 
+                      checked={handoverConfirmed} 
+                      onChange={(e) => setHandoverConfirmed(e.target.checked)} 
+                      style={{ marginTop: '0.2rem' }}
+                    />
+                    <label htmlFor="handover-confirm-check" style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', cursor: 'pointer', lineHeight: '1.3' }}>
+                      Jag bekräftar att all dokumentation har överlämnats till kund för arkivering.
+                    </label>
+                  </div>
+
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.7rem', marginBottom: '0.25rem' }}>Digital signatur (Namnförtydligande)</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="Ditt namn" 
+                      value={handoverSignName} 
+                      onChange={(e) => setHandoverSignName(e.target.value)} 
+                      required 
+                      style={{ padding: '0.4rem', fontSize: '0.8rem' }}
+                    />
+                  </div>
+
+                  <button 
+                    type="submit" 
+                    className="btn btn-primary btn-sm" 
+                    disabled={!handoverRecipient || !handoverDate || !handoverConfirmed || !handoverSignName}
+                    style={{ width: '100%', marginTop: '0.5rem', padding: '0.5rem' }}
+                  >
+                    <Check size={14} style={{ marginRight: '0.25rem' }} /> Signera & Registrera Överlämning
+                  </button>
+                </form>
+              ) : (
+                <div>
+                  <div style={{ display: 'flex', gap: '0.5rem', padding: '0.6rem', backgroundColor: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: '4px', marginBottom: '1rem', alignItems: 'center' }}>
+                    <Check size={16} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-success)', fontWeight: 'bold' }}>
+                      Överlämning till kund är genomförd och signerad.
+                    </span>
+                  </div>
+                  {(() => {
+                    const handoverLog = crmLogs.find(log => log.log_type === 'meeting' && log.summary === 'Dokumentation överlämnad till kund');
+                    if (handoverLog) {
+                      return (
+                        <div style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '6px', padding: '0.75rem' }}>
+                          <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', lineHeight: '1.4', margin: 0, whiteSpace: 'pre-line' }}>
+                            {handoverLog.description}
+                          </p>
+                          <div style={{ marginTop: '0.5rem', borderTop: '1px solid var(--color-border)', paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                            <span>Loggad av ID: {handoverLog.user_id}</span>
+                            <span>{new Date(handoverLog.logged_at).toLocaleDateString('sv-SE')}</span>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
+                        Handläggaren har registrerat att dokumentationen har överlämnats formellt till kunden.
+                      </p>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* GDPR Datagallring */}
           <div className="card" style={{ padding: '1.25rem' }}>
