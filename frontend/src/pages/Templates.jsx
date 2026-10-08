@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { FileText, Plus, HelpCircle, Eye, Settings, X, Check, Save } from 'lucide-react';
+import { useToast } from '../components/Toast.jsx';
 
 function Templates() {
+  const { showToast } = useToast();
   const [templates, setTemplates] = useState([
     {
       id: 1,
@@ -84,14 +86,14 @@ function Templates() {
       return t;
     }));
     setActiveModal(null);
-    alert('Fältmappningen har sparats!');
+    showToast('Fältmappningen har sparats!', 'success');
   };
 
   // Spara ny mall / kund
   const handleSaveNewTemplate = (e) => {
     e.preventDefault();
     if (!newCustomer || !newTitle) {
-      alert('Vänligen fyll i både kund och mallnamn.');
+      showToast('Vänligen fyll i både kund och mallnamn.', 'warning');
       return;
     }
 
@@ -112,12 +114,13 @@ function Templates() {
     setTemplates(prev => [...prev, newTemp]);
     
     // Nollställ
+    const savedCustomerName = newCustomer;
     setNewCustomer('');
     setNewTitle('');
     setNewText('');
     setSelectedWorkflow(['DRAFT', 'QUEUED', 'SENT', 'RECEIVED', 'SIGNED', 'PAID', 'DELIVERED', 'ARCHIVED']);
     setActiveModal(null);
-    alert(`Avtalsmallen för ${newCustomer} har skapats!`);
+    showToast(`Avtalsmallen för ${savedCustomerName} har skapats!`, 'success');
   };
 
   // Rendera markerade platshållare

@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../config';
 import MapWidget from '../components/MapWidget';
-import { ArrowLeft, UserPlus, Trash2, FileText, Upload, Plus, Users, Layout, Shield, FileCheck, Layers, ClipboardList, Info, FileSpreadsheet } from 'lucide-react';
+import { ArrowLeft, UserPlus, Trash2, FileText, Upload, Plus, Users, Layout, Shield, FileCheck, Layers, ClipboardList, Info, FileSpreadsheet, Download, ArrowUpDown, SlidersHorizontal, CheckCircle2, Zap, CreditCard, RefreshCw } from 'lucide-react';
+import { useToast } from '../components/Toast.jsx';
 
 function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashboard }) {
+  const { showToast } = useToast();
   const [project, setProject] = useState(null);
   const [landowners, setLandowners] = useState([]);
   const [collaborators, setCollaborators] = useState([]);
@@ -29,9 +31,16 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
   const [docType, setDocType] = useState('template');
   const [requiresShipping, setRequiresShipping] = useState(true);
   const [selectedOwners, setSelectedOwners] = useState([]);
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'landowners', 'properties', 'settings'
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'landowners', 'properties', 'payout', 'settings'
+  const [kleerBatchSyncing, setKleerBatchSyncing] = useState(false);
+  const [kleerBatchReceipt, setKleerBatchReceipt] = useState(null);
+  const [payoutFilter, setPayoutFilter] = useState('all'); // 'all', 'signed', 'paid', 'missing_bank'
   const [uploadPropertyDesignation, setUploadPropertyDesignation] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [quickFilter, setQuickFilter] = useState('all'); // 'all', 'needs_action', 'in_progress', 'completed'
+  const [isCompact, setIsCompact] = useState(false);
+  const [sortField, setSortField] = useState('name');
+  const [sortDirection, setSortDirection] = useState('asc');
   const [routeCoords, setRouteCoords] = useState([]);
   const [isDrawingRoute, setIsDrawingRoute] = useState(false);
 
@@ -206,13 +215,13 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
       });
       if (res.ok) {
         setIsDrawingRoute(false);
-        alert('Ledningssträckning sparad!');
+        showToast('Ledningssträckning sparad!', 'success');
       } else {
-        alert('Kunde inte spara ledningssträckning.');
+        showToast('Kunde inte spara ledningssträckning.', 'error');
       }
     } catch (err) {
       console.error(err);
-      alert('Nätverksfel vid sparande av sträckning.');
+      showToast('Nätverksfel vid sparande av sträckning.', 'error');
     }
   };
 
@@ -243,11 +252,13 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
       if (res.ok) {
         setSelectedUser('');
         fetchProjectData();
+        showToast('Medarbetare tillagd till projektet.', 'success');
       } else {
-        alert('Användaren är redan tilldelad till detta projekt.');
+        showToast('Användaren är redan tilldelad till detta projekt.', 'warning');
       }
     } catch (err) {
       console.error(err);
+      showToast('Kunde inte lägga till medarbetare.', 'error');
     }
   };
 
@@ -280,10 +291,11 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
       if (res.ok) {
         setLogoFile(null);
         fetchProjectData();
-        alert('Logotyp uppladdad!');
+        showToast('Logotyp uppladdad!', 'success');
       }
     } catch (err) {
       console.error(err);
+      showToast('Kunde inte ladda upp logotyp.', 'error');
     }
   };
 
@@ -336,10 +348,47 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
       setNewOwnerPropLat('');
       setNewOwnerPropLng('');
       fetchProjectData();
+      showToast('Markägare har lagts till!', 'success');
 
     } catch (err) {
       console.error(err);
-      alert(err.message || 'Ett fel uppstod vid sparandet.');
+      showToast(err.message || 'Ett fel uppstod vid sparandet.', 'error');
+    }
+  };
+
+  const [isLookingUpOwner, setIsLookingUpOwner] = useState(false);
+
+  const handleLookupNewOwner = async () => {
+    if (!newOwnerPersonalNum || newOwnerPersonalNum.trim() === '') {
+      showToast('Ange ett personnummer först för att söka i SPAR.', 'warning');
+      return;
+    }
+
+    setIsLookingUpOwner(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/lookup/person/${encodeURIComponent(newOwnerPersonalNum)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Kunde inte hitta personnummer i SPAR.');
+      }
+      const data = await res.json();
+      setNewOwnerName(data.name);
+      setNewOwnerPersonalNum(data.personalNumber);
+      setNewOwnerAddress(data.address);
+      if (data.phone && data.phone !== 'Ej registrerat telefonnummer') {
+        setNewOwnerPhone(data.phone);
+      }
+      if (data.properties && data.properties.length > 0 && !newOwnerPropDesignation) {
+        setNewOwnerPropDesignation(data.properties[0]);
+      }
+      showToast(`Hämtat från SPAR (Roaring): ${data.name} (${data.city || data.address})`, 'success');
+    } catch (err) {
+      console.error(err);
+      showToast(err.message || 'Fel vid personsökning.', 'error');
+    } finally {
+      setIsLookingUpOwner(false);
     }
   };
 
@@ -366,10 +415,11 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
         setRequiresShipping(true);
         setUploadPropertyDesignation('');
         fetchProjectData();
-        alert('Projektdokument uppladdat!');
+        showToast('Projektdokument uppladdat!', 'success');
       }
     } catch (err) {
       console.error(err);
+      showToast('Kunde inte ladda upp dokument.', 'error');
     }
   };
 
@@ -414,15 +464,15 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
 
       if (res.ok) {
         const data = await res.json();
-        alert(data.message);
+        showToast(data.message, 'success');
         setSelectedOwners([]);
         fetchProjectData();
       } else {
-        alert('Det gick inte att boka massutskicket.');
+        showToast('Det gick inte att boka massutskicket.', 'error');
       }
     } catch (err) {
       console.error(err);
-      alert('Ett fel uppstod vid bokningen.');
+      showToast('Ett fel uppstod vid bokningen.', 'error');
     }
   };
 
@@ -461,17 +511,75 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
         a.click();
         a.remove();
         
-        alert('Utbetalningsfil genererad och nedladdad framgångsrikt!');
+        showToast('Utbetalningsfil (ISO 20022 pain.001) nedladdad!', 'success');
         setSelectedOwners([]);
         fetchProjectData();
       } else {
         const errData = await res.json();
-        alert(errData.error || 'Det gick inte att generera utbetalningsfilen.');
+        showToast(errData.error || 'Det gick inte att generera utbetalningsfilen.', 'error');
       }
     } catch (err) {
       console.error(err);
-      alert('Ett fel uppstod vid genereringen av bankfilen.');
+      showToast('Ett fel uppstod vid genereringen av bankfilen.', 'error');
     }
+  };
+
+  const handleKleerBatchSync = async (specificOwnerIds = null) => {
+    let targetIds = specificOwnerIds;
+    if (!targetIds) {
+      if (selectedOwners.length > 0) {
+        targetIds = selectedOwners;
+      } else {
+        const signed = landowners.filter(o => o.status === 'signed');
+        if (signed.length === 0) {
+          showToast('Inga markägare har status "Signerat" för att skickas till Kleer.', 'warning');
+          return;
+        }
+        targetIds = signed.map(o => o.id);
+      }
+    }
+
+    const count = targetIds.length;
+    if (!confirm(`Vill du överföra ${count} markägare direkt till Kleer Ekonomisystem? Detta bokför ersättningen (Debet 6990 / Kredit 1930) och uppdaterar ärendena till "Utbetalt".`)) {
+      return;
+    }
+
+    setKleerBatchSyncing(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${projectId}/kleer/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ landowner_ids: targetIds })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setKleerBatchReceipt(data.receipt);
+        showToast(data.message || `Överfört till Kleer! Bunt: ${data.receipt.batch_id}`, 'success');
+        setSelectedOwners([]);
+        fetchProjectData();
+      } else {
+        showToast(data.error || 'Kunde inte synkronisera till Kleer.', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Ett fel uppstod vid kommunikation med Kleer.', 'error');
+    } finally {
+      setKleerBatchSyncing(false);
+    }
+  };
+
+  const handleExportKleerCsv = () => {
+    window.open(`${API_BASE_URL}/api/projects/${projectId}/kleer/export-csv?token=${token}`, '_blank');
+    showToast('Laddar ned Kleer CSV-importfil...', 'info');
+  };
+
+  const handleExportSie4 = () => {
+    window.open(`${API_BASE_URL}/api/projects/${projectId}/kleer/export-sie?token=${token}`, '_blank');
+    showToast('Laddar ned SIE-4 verifikatfil...', 'info');
   };
 
   const getStatusBadgeClass = (status) => {
@@ -531,9 +639,75 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
     return '1/1';
   };
 
-  const filteredLandowners = statusFilter
-    ? landowners.filter(owner => owner.status === statusFilter)
-    : landowners;
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const exportToCsv = () => {
+    if (landowners.length === 0) {
+      showToast('Inga markägare att exportera.', 'warning');
+      return;
+    }
+
+    const headers = ['Namn', 'Personnummer', 'Fastighet', 'Andel', 'Ersättning (kr)', 'Status', 'Telefon', 'E-post', 'Bankkonto'];
+    const rows = sortedAndFilteredLandowners.map(o => [
+      `"${o.name || ''}"`,
+      `"${o.personal_number || ''}"`,
+      `"${o.properties_list || ''}"`,
+      `"${getOwnerShare(o, landowners)}"`,
+      `"${o.compensation_sum || 0}"`,
+      `"${getStatusSwedishLabel(o.status)}"`,
+      `"${o.phone || ''}"`,
+      `"${o.email || ''}"`,
+      `"${o.bank_account || ''}"`
+    ]);
+
+    const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map(r => r.join(';'))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${project.name.replace(/\s+/g, '_')}_markagare_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('Markägarlista exporterad till CSV!', 'success');
+  };
+
+  const sortedAndFilteredLandowners = React.useMemo(() => {
+    let list = landowners;
+    if (statusFilter) {
+      list = list.filter(owner => owner.status === statusFilter);
+    }
+    if (quickFilter === 'needs_action') {
+      list = list.filter(o => ['draft', 'queued'].includes(o.status));
+    } else if (quickFilter === 'in_progress') {
+      list = list.filter(o => ['posted', 'received', 'processing'].includes(o.status));
+    } else if (quickFilter === 'completed') {
+      list = list.filter(o => ['signed', 'paid', 'easement', 'delivered', 'archived'].includes(o.status));
+    }
+
+    return [...list].sort((a, b) => {
+      let valA = a[sortField] || '';
+      let valB = b[sortField] || '';
+      if (sortField === 'compensation') {
+        valA = a.compensation_sum || 0;
+        valB = b.compensation_sum || 0;
+      }
+      if (typeof valA === 'string') valA = valA.toLowerCase();
+      if (typeof valB === 'string') valB = valB.toLowerCase();
+      if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+      if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [landowners, statusFilter, quickFilter, sortField, sortDirection]);
+
+  const filteredLandowners = sortedAndFilteredLandowners;
 
   if (loading) return <p style={{ color: 'var(--text-secondary)' }}>Laddar projekt...</p>;
   if (!project) return <p style={{ color: 'var(--color-danger)' }}>Projektet hittades inte.</p>;
@@ -604,6 +778,14 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
         </button>
         <button className={`tab-header ${activeTab === 'properties' ? 'active' : ''}`} onClick={() => setActiveTab('properties')} style={{ background: 'none', border: 'none', fontSize: '0.95rem' }}>
           Fastigheter ({getExistingProperties().length})
+        </button>
+        <button className={`tab-header ${activeTab === 'payout' ? 'active' : ''}`} onClick={() => setActiveTab('payout')} style={{ background: 'none', border: 'none', fontSize: '0.95rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+          <CreditCard size={15} /> Utbetalning & Kleer
+          {landowners.filter(o => o.status === 'signed').length > 0 && (
+            <span style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: '10px', backgroundColor: 'var(--color-accent)', color: 'var(--bg-primary)', fontWeight: 'bold' }}>
+              {landowners.filter(o => o.status === 'signed').length} redo
+            </span>
+          )}
         </button>
         <button className={`tab-header ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')} style={{ background: 'none', border: 'none', fontSize: '0.95rem' }}>
           Inställningar
@@ -933,15 +1115,68 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
       {/* TAB 2: MARKÄGARE */}
       {activeTab === 'landowners' && (
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
-              <button className="btn btn-secondary btn-sm" onClick={() => alert('Importera lista: Simulerar uppladdning av Excel/CSV.')}>Importera Excel-lista</button>
-              <button className="btn btn-secondary btn-sm" onClick={() => alert('Infotrader API: Synkar ägaruppgifter mot Fastighetsregistret.')}>Synka Infotrader</button>
+          {/* Top toolbar */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
+            {/* Quick Filter Chips */}
+            <div className="filter-chip-group">
+              <button
+                className={`filter-chip ${quickFilter === 'all' ? 'active' : ''}`}
+                onClick={() => setQuickFilter('all')}
+              >
+                Alla ({landowners.length})
+              </button>
+              <button
+                className={`filter-chip ${quickFilter === 'needs_action' ? 'active' : ''}`}
+                onClick={() => setQuickFilter('needs_action')}
+              >
+                Kräver åtgärd ({landowners.filter(o => ['draft', 'queued'].includes(o.status)).length})
+              </button>
+              <button
+                className={`filter-chip ${quickFilter === 'in_progress' ? 'active' : ''}`}
+                onClick={() => setQuickFilter('in_progress')}
+              >
+                Utskick pågår ({landowners.filter(o => ['posted', 'received', 'processing'].includes(o.status)).length})
+              </button>
+              <button
+                className={`filter-chip ${quickFilter === 'completed' ? 'active' : ''}`}
+                onClick={() => setQuickFilter('completed')}
+              >
+                Signerat & Klart ({landowners.filter(o => ['signed', 'paid', 'easement', 'delivered', 'archived'].includes(o.status)).length})
+              </button>
             </div>
-            
-            <button className="btn btn-primary btn-sm" onClick={() => setShowOwnerModal(true)}>
-              <Plus size={16} /> + Lägg till Markägare
-            </button>
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setIsCompact(!isCompact)}
+                title="Växla radhöjd"
+                style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem' }}
+              >
+                <SlidersHorizontal size={13} /> {isCompact ? 'Normal vy' : 'Kompakt vy'}
+              </button>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={exportToCsv}
+                style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem' }}
+              >
+                <Download size={13} /> Exportera CSV
+              </button>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => showToast('Importera lista: Simulerar uppladdning av Excel/CSV.', 'info')}
+                style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem' }}
+              >
+                Importera Excel
+              </button>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => setShowOwnerModal(true)}
+                style={{ fontSize: '0.75rem', padding: '0.35rem 0.75rem' }}
+              >
+                <Plus size={14} /> + Lägg till Markägare
+              </button>
+            </div>
           </div>
 
           {/* Bulk actions */}
@@ -950,8 +1185,8 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
               backgroundColor: 'var(--bg-secondary)',
               border: '1px solid var(--color-border)',
               borderRadius: '8px',
-              padding: '1rem',
-              marginBottom: '1.5rem',
+              padding: '0.85rem 1.25rem',
+              marginBottom: '1.25rem',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center'
@@ -978,16 +1213,16 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
               backgroundColor: 'rgba(95, 200, 145, 0.05)',
               border: '1px solid rgba(95, 200, 145, 0.2)',
               borderRadius: '6px',
-              padding: '0.75rem 1rem',
+              padding: '0.65rem 1rem',
               marginBottom: '1rem',
-              fontSize: '0.85rem'
+              fontSize: '0.82rem'
             }}>
               <span style={{ color: 'white' }}>
                 Filtrerat på status: <strong style={{ color: 'var(--color-accent)' }}>{getStatusSwedishLabel(statusFilter).toUpperCase()}</strong> ({filteredLandowners.length} markägare)
               </span>
               <button 
                 className="btn btn-secondary btn-sm" 
-                style={{ textTransform: 'none', padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                style={{ textTransform: 'none', padding: '0.2rem 0.5rem', fontSize: '0.72rem' }}
                 onClick={() => setStatusFilter('')}
               >
                 Visa alla
@@ -996,10 +1231,10 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
           )}
 
           <div className="table-container">
-            <table className="table">
+            <table className={`table ${isCompact ? 'table-compact' : ''}`}>
               <thead>
                 <tr>
-                  <th style={{ width: '40px' }}>
+                  <th style={{ width: '36px' }}>
                     <input 
                       type="checkbox" 
                       checked={filteredLandowners.length > 0 && selectedOwners.length === filteredLandowners.length}
@@ -1012,12 +1247,28 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
                       }}
                     />
                   </th>
-                  <th>Markägare</th>
+                  <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('name')}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                      Markägare {sortField === 'name' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
+                  </th>
                   <th>Personnummer</th>
-                  <th>Fastighet</th>
+                  <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('properties_list')}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                      Fastighet {sortField === 'properties_list' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
+                  </th>
                   <th>Andel</th>
-                  <th>Ersättning</th>
-                  <th>Status</th>
+                  <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('compensation')}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                      Ersättning {sortField === 'compensation' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
+                  </th>
+                  <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('status')}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                      Status {sortField === 'status' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
+                  </th>
                   <th style={{ textAlign: 'right' }}>Åtgärd</th>
                 </tr>
               </thead>
@@ -1051,17 +1302,19 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
                         />
                       </td>
                       <td style={{ fontWeight: 600, color: 'white' }}>{owner.name}</td>
-                      <td style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>{maskPersonalNumber(owner.personal_number)}</td>
+                      <td style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{maskPersonalNumber(owner.personal_number)}</td>
                       <td>{owner.properties_list || 'Ej tillagd'}</td>
                       <td>{getOwnerShare(owner, landowners)}</td>
-                      <td>{owner.compensation_sum ? `${owner.compensation_sum.toLocaleString('sv-SE')} kr` : '0 kr'}</td>
+                      <td style={{ fontWeight: 600, color: owner.compensation_sum ? 'var(--color-accent)' : 'var(--text-muted)' }}>
+                        {owner.compensation_sum ? `${owner.compensation_sum.toLocaleString('sv-SE')} kr` : '0 kr'}
+                      </td>
                       <td>
-                        <span className={`badge ${getStatusBadgeClass(owner.status)}`} style={{ fontSize: '0.65rem', padding: '0.15rem 0.5rem' }}>
+                        <span className={`status-pill status-pill-${owner.status}`}>
                           {getStatusSwedishLabel(owner.status)}
                         </span>
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        <button className="btn btn-secondary btn-sm" style={{ textTransform: 'none', padding: '0.3rem 0.75rem' }} onClick={() => navigateToLandowner(owner.id)}>
+                        <button className="btn btn-secondary btn-sm" style={{ textTransform: 'none', padding: '0.25rem 0.65rem', fontSize: '0.75rem' }} onClick={() => navigateToLandowner(owner.id)}>
                           Hantera
                         </button>
                       </td>
@@ -1159,7 +1412,354 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
         </div>
       )}
 
-      {/* TAB 4: INSTÄLLNINGAR */}
+      {/* TAB 4: UTBETALNING & KLEER EKONOMISYSTEM */}
+      {activeTab === 'payout' && (() => {
+        const totalComp = landowners.reduce((sum, o) => sum + (parseFloat(o.compensation_sum) || 0), 0);
+        const signedComp = landowners.filter(o => o.status === 'signed').reduce((sum, o) => sum + (parseFloat(o.compensation_sum) || 0), 0);
+        const paidComp = landowners.filter(o => ['paid', 'easement', 'delivered', 'archived'].includes(o.status)).reduce((sum, o) => sum + (parseFloat(o.compensation_sum) || 0), 0);
+        const signedOwnersCount = landowners.filter(o => o.status === 'signed').length;
+        const paidOwnersCount = landowners.filter(o => ['paid', 'easement', 'delivered', 'archived'].includes(o.status)).length;
+        const missingBankCount = landowners.filter(o => !o.bank_account || o.bank_account.trim() === '').length;
+
+        const payoutFilteredOwners = landowners.filter(o => {
+          if (payoutFilter === 'signed') return o.status === 'signed';
+          if (payoutFilter === 'paid') return ['paid', 'easement', 'delivered', 'archived'].includes(o.status);
+          if (payoutFilter === 'missing_bank') return !o.bank_account || o.bank_account.trim() === '';
+          return true;
+        });
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+            
+            {/* KPI Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
+              <div className="card" style={{ padding: '1.25rem' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontFamily: 'var(--font-title)' }}>
+                  Totalt Ersättningsbelopp
+                </span>
+                <p style={{ fontSize: '1.6rem', fontWeight: 'bold', color: 'white', margin: '0.35rem 0 0.15rem 0' }}>
+                  {Math.round(totalComp).toLocaleString('sv-SE')} kr
+                </p>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Samtliga {landowners.length} markägare
+                </span>
+              </div>
+
+              <div className="card" style={{ padding: '1.25rem', borderLeft: '4px solid var(--color-accent)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-accent)', textTransform: 'uppercase', fontFamily: 'var(--font-title)', fontWeight: 'bold' }}>
+                  Redo för Utbetalning
+                </span>
+                <p style={{ fontSize: '1.6rem', fontWeight: 'bold', color: 'var(--color-accent)', margin: '0.35rem 0 0.15rem 0' }}>
+                  {Math.round(signedComp).toLocaleString('sv-SE')} kr
+                </p>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  {signedOwnersCount} signerade avtal
+                </span>
+              </div>
+
+              <div className="card" style={{ padding: '1.25rem', borderLeft: '4px solid var(--color-success)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-success)', textTransform: 'uppercase', fontFamily: 'var(--font-title)' }}>
+                  Utbetalt & Bokfört i Kleer
+                </span>
+                <p style={{ fontSize: '1.6rem', fontWeight: 'bold', color: 'white', margin: '0.35rem 0 0.15rem 0' }}>
+                  {Math.round(paidComp).toLocaleString('sv-SE')} kr
+                </p>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  {paidOwnersCount} bokförda poster
+                </span>
+              </div>
+
+              <div className="card" style={{ padding: '1.25rem', borderLeft: missingBankCount > 0 ? '4px solid var(--color-danger)' : '4px solid var(--color-border)' }}>
+                <span style={{ fontSize: '0.75rem', color: missingBankCount > 0 ? 'var(--color-danger)' : 'var(--text-secondary)', textTransform: 'uppercase', fontFamily: 'var(--font-title)' }}>
+                  Bankkonto Saknas
+                </span>
+                <p style={{ fontSize: '1.6rem', fontWeight: 'bold', color: missingBankCount > 0 ? 'var(--color-danger)' : 'white', margin: '0.35rem 0 0.15rem 0' }}>
+                  {missingBankCount} st
+                </p>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  {missingBankCount > 0 ? 'Kräver komplettering' : 'Alla konton registrerade'}
+                </span>
+              </div>
+            </div>
+
+            {/* Kleer Integrationspanel & Action-fält */}
+            <div className="card" style={{ padding: '1.5rem', background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0.8) 100%)', border: '1px solid rgba(95, 200, 145, 0.25)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <h2 style={{ fontSize: '1.15rem', color: 'white', margin: 0, fontFamily: 'var(--font-title)' }}>
+                      Kleer Ekonomisystem Integration
+                    </h2>
+                    <span className="badge badge-completed" style={{ fontSize: '0.7rem' }}>
+                      ⚡ API Integrerat & Aktivt
+                    </span>
+                  </div>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '0.3rem 0 0 0' }}>
+                    Automatisk kontering: <strong>Debet 6990</strong> (Markintrångsersättning) / <strong>Kredit 1930</strong> (Företagskonto). Status sätts till <em>Utbetalt</em>.
+                  </p>
+                </div>
+
+                {/* Huvudknappar */}
+                <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                  <button 
+                    className="btn btn-primary"
+                    onClick={() => handleKleerBatchSync()}
+                    disabled={kleerBatchSyncing || (selectedOwners.length === 0 && signedOwnersCount === 0)}
+                    style={{ fontSize: '0.82rem', padding: '0.55rem 1rem' }}
+                  >
+                    {kleerBatchSyncing ? (
+                      <>
+                        <RefreshCw size={15} className="spin" /> Överför till Kleer...
+                      </>
+                    ) : (
+                      <>
+                        <Zap size={15} /> ⚡ Överför {selectedOwners.length > 0 ? `${selectedOwners.length} valda` : 'alla signerade'} till Kleer (API)
+                      </>
+                    )}
+                  </button>
+
+                  <button 
+                    className="btn btn-secondary"
+                    onClick={handleExportKleerCsv}
+                    style={{ fontSize: '0.82rem', padding: '0.55rem 0.85rem' }}
+                    title="Exportera semikolonavgränsad CSV skräddarsydd för Kleer ekonomisystem"
+                  >
+                    <Download size={14} /> Kleer CSV
+                  </button>
+
+                  <button 
+                    className="btn btn-secondary"
+                    onClick={handleExportSie4}
+                    style={{ fontSize: '0.82rem', padding: '0.55rem 0.85rem' }}
+                    title="Exportera svensk standardbokföringsfil SIE-4"
+                  >
+                    <Download size={14} /> SIE-4 Verifikat
+                  </button>
+
+                  <button 
+                    className="btn btn-secondary"
+                    onClick={handleGeneratePaymentFile}
+                    disabled={selectedOwners.length === 0}
+                    style={{ fontSize: '0.82rem', padding: '0.55rem 0.85rem' }}
+                    title="Generera bankutbetalningsfil enligt ISO 20022 XML pain.001"
+                  >
+                    <Download size={14} /> ISO 20022 (pain.001)
+                  </button>
+                </div>
+              </div>
+
+              {/* Senaste bokföringskvitto */}
+              {kleerBatchReceipt && (
+                <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '6px', padding: '1rem', marginTop: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <CheckCircle2 size={18} style={{ color: 'var(--color-success)' }} />
+                      <strong style={{ color: 'white', fontSize: '0.88rem' }}>Senaste synkronisering till Kleer godkänd!</strong>
+                    </div>
+                    <span style={{ fontFamily: 'monospace', color: 'var(--color-success)', fontSize: '0.8rem' }}>
+                      Bunt: {kleerBatchReceipt.batch_id} | Verifikat: {kleerBatchReceipt.verification_number}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '2rem', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                    <span>Överförda poster: <strong style={{ color: 'white' }}>{kleerBatchReceipt.count} st</strong></span>
+                    <span>Bokfört totalt: <strong style={{ color: 'var(--color-accent)' }}>{Math.round(kleerBatchReceipt.total_amount || 0).toLocaleString('sv-SE')} kr</strong></span>
+                    <span>Kontering: <strong style={{ color: 'white' }}>D: 6990 / K: 1930</strong></span>
+                    <span>Läge: <strong style={{ color: 'white' }}>{kleerBatchReceipt.mode === 'live_api' ? 'Kleer REST API' : 'Kleer Mock Sandbox'}</strong></span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Filter- och tabellsektion för utbetalningar */}
+            <div className="card" style={{ padding: '1.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
+                {/* Filterknappar */}
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <button 
+                    className={`btn btn-sm ${payoutFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setPayoutFilter('all')}
+                    style={{ fontSize: '0.75rem' }}
+                  >
+                    Alla ({landowners.length})
+                  </button>
+                  <button 
+                    className={`btn btn-sm ${payoutFilter === 'signed' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setPayoutFilter('signed')}
+                    style={{ fontSize: '0.75rem' }}
+                  >
+                    Redo för Kleer ({signedOwnersCount})
+                  </button>
+                  <button 
+                    className={`btn btn-sm ${payoutFilter === 'paid' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setPayoutFilter('paid')}
+                    style={{ fontSize: '0.75rem' }}
+                  >
+                    Utbetalda & Bokförda ({paidOwnersCount})
+                  </button>
+                  <button 
+                    className={`btn btn-sm ${payoutFilter === 'missing_bank' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setPayoutFilter('missing_bank')}
+                    style={{ fontSize: '0.75rem', borderColor: missingBankCount > 0 ? 'var(--color-danger)' : undefined }}
+                  >
+                    Saknar Bankkonto ({missingBankCount})
+                  </button>
+                </div>
+
+                {/* Markera snabbknappar */}
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  {selectedOwners.length > 0 && (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-accent)' }}>
+                      {selectedOwners.length} markerade
+                    </span>
+                  )}
+                  <button 
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      const signedIds = landowners.filter(o => o.status === 'signed').map(o => o.id);
+                      setSelectedOwners(signedIds);
+                    }}
+                    style={{ fontSize: '0.72rem' }}
+                  >
+                    Markera alla redo ({signedOwnersCount})
+                  </button>
+                  {selectedOwners.length > 0 && (
+                    <button 
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setSelectedOwners([])}
+                      style={{ fontSize: '0.72rem' }}
+                    >
+                      Avmarkera
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Utbetalningstabell */}
+              <div style={{ overflowX: 'auto' }}>
+                <table className="table" style={{ fontSize: '0.82rem' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '40px' }}>
+                        <input 
+                          type="checkbox"
+                          checked={payoutFilteredOwners.length > 0 && payoutFilteredOwners.every(o => selectedOwners.includes(o.id))}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              const allIds = Array.from(new Set([...selectedOwners, ...payoutFilteredOwners.map(o => o.id)]));
+                              setSelectedOwners(allIds);
+                            } else {
+                              const pageIds = new Set(payoutFilteredOwners.map(o => o.id));
+                              setSelectedOwners(selectedOwners.filter(id => !pageIds.has(id)));
+                            }
+                          }}
+                        />
+                      </th>
+                      <th>Markägare</th>
+                      <th>Personnummer</th>
+                      <th>Fastighet</th>
+                      <th>Bankkontonummer</th>
+                      <th style={{ textAlign: 'right' }}>Ersättning</th>
+                      <th style={{ textAlign: 'center' }}>Status</th>
+                      <th style={{ textAlign: 'right' }}>Åtgärd</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payoutFilteredOwners.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                          Inga markägare matchar det valda filtret.
+                        </td>
+                      </tr>
+                    ) : (
+                      payoutFilteredOwners.map(owner => {
+                        const isSelected = selectedOwners.includes(owner.id);
+                        const isMissingBank = !owner.bank_account || owner.bank_account.trim() === '';
+                        const compValue = parseFloat(owner.compensation_sum) || 0;
+
+                        return (
+                          <tr key={owner.id} style={{ backgroundColor: isSelected ? 'rgba(95, 200, 145, 0.05)' : undefined }}>
+                            <td>
+                              <input 
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedOwners(prev => [...prev, owner.id]);
+                                  } else {
+                                    setSelectedOwners(prev => prev.filter(id => id !== owner.id));
+                                  }
+                                }}
+                              />
+                            </td>
+                            <td>
+                              <span 
+                                style={{ fontWeight: 600, color: 'white', cursor: 'pointer', textDecoration: 'underline' }}
+                                onClick={() => navigateToLandowner(owner.id)}
+                              >
+                                {owner.name}
+                              </span>
+                            </td>
+                            <td style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                              {maskPersonalNumber(owner.personal_number)}
+                            </td>
+                            <td>{owner.properties_list || 'Ej kopplad'}</td>
+                            <td>
+                              {isMissingBank ? (
+                                <span style={{ color: 'var(--color-danger)', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                  ⚠️ Bankkonto saknas
+                                </span>
+                              ) : (
+                                <span style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'white' }}>
+                                  {owner.bank_account}
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ textAlign: 'right', fontWeight: 'bold', color: compValue > 0 ? 'var(--color-accent)' : 'var(--text-muted)' }}>
+                              {Math.round(compValue).toLocaleString('sv-SE')} kr
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              <span className={`status-pill status-pill-${owner.status}`} style={{ fontSize: '0.68rem', padding: '0.15rem 0.45rem' }}>
+                                {getStatusSwedishLabel(owner.status)}
+                              </span>
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              {owner.status === 'signed' ? (
+                                <button 
+                                  className="btn btn-primary btn-sm"
+                                  onClick={() => handleKleerBatchSync([owner.id])}
+                                  style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem' }}
+                                  title="Överför endast denna post till Kleer"
+                                >
+                                  ⚡ Till Kleer
+                                </button>
+                              ) : owner.status === 'paid' ? (
+                                <span style={{ color: 'var(--color-success)', fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                  <CheckCircle2 size={13} /> Bokförd
+                                </span>
+                              ) : (
+                                <button 
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => navigateToLandowner(owner.id)}
+                                  style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem' }}
+                                >
+                                  Öppna
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        );
+      })()}
+
+      {/* TAB 5: INSTÄLLNINGAR */}
       {activeTab === 'settings' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
           
@@ -1284,28 +1884,48 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
             <h2 style={{ fontSize: '1.4rem', marginBottom: '1.5rem', color: 'white' }}>Lägg till Markägare & Fastighet</h2>
             
             <form onSubmit={handleAddLandowner}>
-              <h3 style={{ fontSize: '0.9rem', color: 'var(--color-accent)', marginBottom: '0.75rem' }}>Personuppgifter</h3>
-              <div className="form-group">
-                <label className="form-label">Namn (Markägare)</label>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  placeholder="T.ex. Sven Svensson"
-                  value={newOwnerName}
-                  onChange={(e) => setNewOwnerName(e.target.value)}
-                  required
-                />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                <h3 style={{ fontSize: '0.9rem', color: 'var(--color-accent)', margin: 0 }}>Personuppgifter</h3>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Kopplad till SPAR (Roaring Mock)</span>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div className="form-group">
-                  <label className="form-label">Personnummer</label>
+              {/* Personnummer först med SPAR-knapp */}
+              <div className="form-group" style={{ marginBottom: '1rem', backgroundColor: 'rgba(95, 200, 145, 0.05)', border: '1px solid rgba(95, 200, 145, 0.2)', padding: '0.75rem', borderRadius: '6px' }}>
+                <label className="form-label" style={{ fontSize: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Personnummer (SPAR-uppslag)</span>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>ÅÅÅÅMMDD-XXXX</span>
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <input 
                     type="text" 
                     className="form-input" 
-                    placeholder="YYYYMMDD-XXXX"
+                    placeholder="T.ex. 19750512-1234 eller 19900101-1234"
                     value={newOwnerPersonalNum}
                     onChange={(e) => setNewOwnerPersonalNum(e.target.value)}
+                    style={{ fontSize: '0.82rem' }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleLookupNewOwner}
+                    disabled={isLookingUpOwner}
+                    style={{ whiteSpace: 'nowrap', fontSize: '0.75rem', borderColor: 'var(--color-accent)', color: 'var(--color-accent)', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                  >
+                    <Zap size={13} /> {isLookingUpOwner ? 'Söker...' : 'Hämta från SPAR'}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1rem' }}>
+                <div className="form-group">
+                  <label className="form-label">Namn (Markägare)</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="T.ex. Sven Svensson"
+                    value={newOwnerName}
+                    onChange={(e) => setNewOwnerName(e.target.value)}
+                    required
                   />
                 </div>
                 <div className="form-group">
@@ -1313,7 +1933,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
                   <input 
                     type="text" 
                     className="form-input" 
-                    placeholder="070-1234567"
+                    placeholder="070-123 45 67"
                     value={newOwnerPhone}
                     onChange={(e) => setNewOwnerPhone(e.target.value)}
                   />

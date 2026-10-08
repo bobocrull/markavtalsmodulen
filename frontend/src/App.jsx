@@ -5,16 +5,32 @@ import Dashboard from './pages/Dashboard';
 import ProjectDetails from './pages/ProjectDetails';
 import LandownerDetails from './pages/LandownerDetails';
 import Templates from './pages/Templates';
-import { LogOut, LayoutDashboard, Layers, Inbox, ShieldAlert, FileText } from 'lucide-react';
+import { LogOut, LayoutDashboard, Layers, Inbox, ShieldAlert, FileText, Search } from 'lucide-react';
+import { useToast } from './components/Toast.jsx';
+import GlobalSearchModal from './components/GlobalSearchModal.jsx';
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || '');
   const [user, setUser] = useState(null);
+  const { showToast } = useToast();
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   
   // Enkel state-baserad router
   const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'projects', 'project', 'landowner', 'templates', 'inbox', 'gdpr'
   const [activeProjectId, setActiveProjectId] = useState(null);
   const [activeLandownerId, setActiveLandownerId] = useState(null);
+
+  // Global Ctrl+K / Cmd+K kortkommando
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsSearchOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Globala tillstånd för inbox returer och GDPR purges
   const [matchedReturns, setMatchedReturns] = useState([
@@ -217,15 +233,15 @@ function App() {
         setInboxSelectedFile(null);
         setInboxOcrResult(null);
         setInboxUploading(false);
-        alert(`Dokumentet har laddats upp till ${selectedOwner.name}s profil och lagts till i Inboxen för slutgiltig matchning!`);
+        showToast(`Dokumentet har laddats upp till ${selectedOwner.name}s profil och lagts till i Inboxen!`, 'success');
       } else {
         const errorData = await res.json();
-        alert(`Kunde inte ladda upp filen: ${errorData.error || 'Okänt fel'}`);
+        showToast(`Kunde inte ladda upp filen: ${errorData.error || 'Okänt fel'}`, 'error');
         setInboxUploading(false);
       }
     } catch (err) {
       console.error(err);
-      alert('Ett fel uppstod vid uppladdning.');
+      showToast('Ett fel uppstod vid uppladdning.', 'error');
       setInboxUploading(false);
     }
   };
@@ -273,18 +289,17 @@ function App() {
         });
 
         if (updateRes.ok) {
-          alert(`Matchning lyckades! Fysiskt originalavtal för ${foundOwner.name} har mottagits och markerats som SIGNERAT.`);
+          showToast(`Matchning lyckades! Fysiskt originalavtal för ${foundOwner.name} har mottagits och markerats som SIGNERAT.`, 'success');
           setMatchedReturns(prev => prev.filter(r => r.name !== name));
-          // Om vi är på projektvyn eller markägarprofilen vill vi eventuellt ladda om den datan också
         } else {
-          alert('Kunde inte uppdatera status.');
+          showToast('Kunde inte uppdatera status.', 'error');
         }
       } else {
-        alert(`Kunde inte hitta markägaren "${name}" i databasen.`);
+        showToast(`Kunde inte hitta markägaren "${name}" i databasen.`, 'error');
       }
     } catch (err) {
       console.error(err);
-      alert('Ett fel uppstod vid matchning.');
+      showToast('Ett fel uppstod vid matchning.', 'error');
     }
   };
 
@@ -317,15 +332,16 @@ function App() {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.ok) {
-          alert(`GDPR-gallring slutförd! Personuppgifter för ${foundOwner.name} har permanent raderats.`);
+          showToast(`GDPR-gallring slutförd! Personuppgifter för ${foundOwner.name} har permanent raderats.`, 'success');
           setGdprPurges(prev => prev.filter(p => p.name !== name));
         }
       } else {
         setGdprPurges(prev => prev.filter(p => p.name !== name));
-        alert('Personuppgifter rensade från gallringslistan.');
+        showToast('Personuppgifter rensade från gallringslistan.', 'info');
       }
     } catch (err) {
       console.error(err);
+      showToast('Ett fel inträffade vid gallring.', 'error');
     }
   };
 
@@ -340,6 +356,39 @@ function App() {
         <div className="sidebar-brand" style={{ cursor: 'pointer' }} onClick={navigateToDashboard}>
           <img src="/src/assets/nektab_logo_white.png" alt="NEKTAB" style={{ width: '100%', maxWidth: '130px', marginBottom: '0.25rem' }} />
           <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: 'var(--font-title)', display: 'block' }}>Markupplåtelse</span>
+        </div>
+
+        {/* Global Spotlight Search Trigger */}
+        <div style={{ padding: '0 0.25rem', marginBottom: '1.25rem' }}>
+          <button
+            onClick={() => setIsSearchOpen(true)}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              backgroundColor: 'var(--bg-primary)',
+              border: '1px solid var(--color-border)',
+              borderRadius: '6px',
+              padding: '0.5rem 0.65rem',
+              color: 'var(--text-muted)',
+              fontSize: '0.75rem',
+              cursor: 'pointer',
+              transition: 'all 0.15s'
+            }}
+            title="Snabb-sökning (Ctrl + K)"
+          >
+            <Search size={14} style={{ color: 'var(--color-accent)' }} />
+            <span style={{ flex: 1, textAlign: 'left' }}>Sök allt...</span>
+            <span style={{
+              fontSize: '0.6rem',
+              backgroundColor: 'var(--bg-secondary)',
+              border: '1px solid var(--color-border)',
+              borderRadius: '3px',
+              padding: '0.1rem 0.3rem',
+              color: 'var(--text-secondary)'
+            }}>Ctrl K</span>
+          </button>
         </div>
 
         <div className="sidebar-menu">
@@ -728,6 +777,15 @@ function App() {
           <Templates />
         )}
       </main>
+
+      {/* Global Spotlight Search Modal */}
+      <GlobalSearchModal
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        token={token}
+        navigateToProject={navigateToProject}
+        navigateToLandowner={navigateToLandowner}
+      />
     </div>
   );
 }

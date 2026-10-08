@@ -11,8 +11,12 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
 const db = require('./db');
+const { lookupPerson } = require('./services/roaringService');
+const { syncToKleer, generateKleerCsv, generateSie4 } = require('./services/kleerService');
 
 const app = express();
+app.set('trust proxy', 1);
+
 const PORT = process.env.PORT || 5000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
@@ -28,20 +32,27 @@ const JWT_SECRET = process.env.JWT_SECRET || 'supersecretmvpkey123!';
 const UPLOAD_DIR = process.env.UPLOAD_DIR || 'uploads';
 
 // Rate Limiter Configurations
+const isLocal = (req) => {
+  const ip = req.ip || req.connection?.remoteAddress || '';
+  return ip === '127.0.0.1' || ip === '::1' || ip.includes('127.0.0.1');
+};
+
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200, // Limit each IP to 200 requests per 15 minutes
+  max: NODE_ENV === 'production' ? 2000 : 50000,
   message: { error: 'För många anrop från denna IP-adress, försök igen senare.' },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => NODE_ENV !== 'production' || isLocal(req),
 });
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 15, // Limit each IP to 15 login attempts per 15 minutes
+  max: NODE_ENV === 'production' ? 50 : 1000,
   message: { error: 'För många inloggningsförsök, försök igen om 15 minuter.' },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => NODE_ENV !== 'production' || isLocal(req),
 });
 
 // Middlewares
@@ -539,6 +550,33 @@ app.delete('/api/projects/:id/collaborators/:userId', authenticateToken, (req, r
     if (err) return res.status(500).json({ error: 'Kunde inte ta bort medarbetare.' });
     res.json({ message: 'Beredare borttagen från projektet.' });
   });
+});
+
+// ----------------------------------------------------
+// PERSONUPPSLAGNING (SPAR / ROARING.IO)
+// ----------------------------------------------------
+app.get('/api/lookup/person/:personalNumber', authenticateToken, async (req, res) => {
+  try {
+    const data = await lookupPerson(req.params.personalNumber);
+    res.json(data);
+  } catch (err) {
+    console.error('Fel vid personsökning (Roaring):', err);
+    res.status(400).json({ error: err.message || 'Kunde inte slå upp personnummer.' });
+  }
+});
+
+app.post('/api/lookup/person', authenticateToken, async (req, res) => {
+  const { personal_number } = req.body;
+  if (!personal_number) {
+    return res.status(400).json({ error: 'Personnummer saknas.' });
+  }
+  try {
+    const data = await lookupPerson(personal_number);
+    res.json(data);
+  } catch (err) {
+    console.error('Fel vid personsökning (Roaring):', err);
+    res.status(400).json({ error: err.message || 'Kunde inte slå upp personnummer.' });
+  }
 });
 
 // ----------------------------------------------------
@@ -1330,6 +1368,201 @@ app.post('/api/projects/:projectId/generate-payment-file', authenticateToken, as
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Kunde inte generera bankutbetalningsfilen: ' + err });
+  }
+});
+
+// ----------------------------------------------------
+// KLEER EKONOMISYSTEM INTEGRATION API
+// ----------------------------------------------------
+
+// 1. Synkronisera projektutbetalningar direkt till Kleer
+app.post('/api/projects/:projectId/kleer/sync', authenticateToken, async (req, res) => {
+  const { landowner_ids } = req.body;
+  const projectId = req.params.projectId;
+
+  try {
+    const project = await new Promise((resolve, reject) => {
+      db.get("SELECT * FROM projects WHERE id = ?", [projectId], (err, row) => {
+        if (err || !row) reject('Projektet hittades inte.');
+        else resolve(row);
+      });
+    });
+
+    let query = `
+      SELECT l.id, l.name, l.personal_number, l.bank_account, l.status,
+             (SELECT compensation_sum FROM land_valuations WHERE landowner_id = l.id) as compensation_sum,
+             (SELECT GROUP_CONCAT(designation, ', ') FROM properties WHERE landowner_id = l.id) as properties_list
+      FROM landowners l
+      WHERE l.project_id = ?
+    `;
+    const params = [projectId];
+
+    if (landowner_ids && Array.isArray(landowner_ids) && landowner_ids.length > 0) {
+      const placeholders = landowner_ids.map(() => '?').join(',');
+      query += ` AND l.id IN (${placeholders})`;
+      params.push(...landowner_ids);
+    } else {
+      query += ` AND (l.status = 'signed' OR l.status = 'paid')`;
+    }
+
+    const landowners = await new Promise((resolve, reject) => {
+      db.all(query, params, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows || []);
+      });
+    });
+
+    if (landowners.length === 0) {
+      return res.status(400).json({ error: 'Inga markägare hittades för överföring till Kleer.' });
+    }
+
+    const result = await syncToKleer(project, landowners);
+
+    const targetIds = landowners.map(lo => lo.id);
+    const idPlaceholders = targetIds.map(() => '?').join(',');
+    await new Promise((resolve, reject) => {
+      db.run(`UPDATE landowners SET status = 'paid' WHERE id IN (${idPlaceholders})`, targetIds, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    targetIds.forEach(loId => {
+      db.run(
+        "INSERT INTO crm_communication_logs (landowner_id, user_id, log_type, summary, description) VALUES (?, ?, 'note', 'Utbetalning överförd till Kleer', ?)",
+        [loId, req.user?.id || 1, `Överfört till Kleer Ekonomisystem. Referens: ${result.batch_id} (${result.verification_number})`]
+      );
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error('Kleer sync error:', err);
+    res.status(400).json({ error: err.message || 'Kunde inte synkronisera till Kleer.' });
+  }
+});
+
+// 2. Exportera Kleer CSV-fil för projektet
+app.get('/api/projects/:projectId/kleer/export-csv', authenticateToken, async (req, res) => {
+  const projectId = req.params.projectId;
+
+  try {
+    const project = await new Promise((resolve, reject) => {
+      db.get("SELECT * FROM projects WHERE id = ?", [projectId], (err, row) => {
+        if (err || !row) reject('Projektet hittades inte.');
+        else resolve(row);
+      });
+    });
+
+    const query = `
+      SELECT l.id, l.name, l.personal_number, l.bank_account, l.status,
+             (SELECT compensation_sum FROM land_valuations WHERE landowner_id = l.id) as compensation_sum,
+             (SELECT GROUP_CONCAT(designation, ', ') FROM properties WHERE landowner_id = l.id) as properties_list
+      FROM landowners l
+      WHERE l.project_id = ?
+    `;
+
+    const landowners = await new Promise((resolve, reject) => {
+      db.all(query, [projectId], (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows || []);
+      });
+    });
+
+    const csvData = generateKleerCsv(project, landowners);
+    const filename = `kleer_utbetalningar_${project.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send('\uFEFF' + csvData);
+  } catch (err) {
+    console.error('Kleer CSV export error:', err);
+    res.status(500).json({ error: 'Kunde inte generera Kleer CSV-fil.' });
+  }
+});
+
+// 3. Exportera SIE-4 verifikatfil för Kleer
+app.get('/api/projects/:projectId/kleer/export-sie', authenticateToken, async (req, res) => {
+  const projectId = req.params.projectId;
+
+  try {
+    const project = await new Promise((resolve, reject) => {
+      db.get("SELECT * FROM projects WHERE id = ?", [projectId], (err, row) => {
+        if (err || !row) reject('Projektet hittades inte.');
+        else resolve(row);
+      });
+    });
+
+    const query = `
+      SELECT l.id, l.name, l.personal_number, l.bank_account, l.status,
+             (SELECT compensation_sum FROM land_valuations WHERE landowner_id = l.id) as compensation_sum,
+             (SELECT GROUP_CONCAT(designation, ', ') FROM properties WHERE landowner_id = l.id) as properties_list
+      FROM landowners l
+      WHERE l.project_id = ?
+    `;
+
+    const landowners = await new Promise((resolve, reject) => {
+      db.all(query, [projectId], (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows || []);
+      });
+    });
+
+    const sieData = generateSie4(project, landowners);
+    const filename = `verifikat_kleer_${project.name.replace(/\s+/g, '_')}.se`;
+
+    res.setHeader('Content-Type', 'text/plain; charset=iso-8859-1');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(sieData);
+  } catch (err) {
+    console.error('Kleer SIE export error:', err);
+    res.status(500).json({ error: 'Kunde inte generera SIE-verifikat.' });
+  }
+});
+
+// 4. Synkronisera en enskild markägare direkt till Kleer
+app.post('/api/landowners/:id/kleer/sync', authenticateToken, async (req, res) => {
+  const landownerId = req.params.id;
+
+  try {
+    const landowner = await new Promise((resolve, reject) => {
+      const query = `
+        SELECT l.*,
+               (SELECT compensation_sum FROM land_valuations WHERE landowner_id = l.id) as compensation_sum,
+               (SELECT GROUP_CONCAT(designation, ', ') FROM properties WHERE landowner_id = l.id) as properties_list
+        FROM landowners l
+        WHERE l.id = ?
+      `;
+      db.get(query, [landownerId], (err, row) => {
+        if (err || !row) reject('Markägaren hittades inte.');
+        else resolve(row);
+      });
+    });
+
+    const project = await new Promise((resolve, reject) => {
+      db.get("SELECT * FROM projects WHERE id = ?", [landowner.project_id], (err, row) => {
+        if (err || !row) reject('Projektet hittades inte.');
+        else resolve(row);
+      });
+    });
+
+    const result = await syncToKleer(project, [landowner]);
+
+    await new Promise((resolve, reject) => {
+      db.run("UPDATE landowners SET status = 'paid' WHERE id = ?", [landownerId], (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    db.run(
+      "INSERT INTO crm_communication_logs (landowner_id, user_id, log_type, summary, description) VALUES (?, ?, 'note', 'Utbetalning överförd till Kleer', ?)",
+      [landownerId, req.user?.id || 1, `Individuell utbetalning överförd till Kleer. Referens: ${result.batch_id} (${result.verification_number})`]
+    );
+
+    res.json(result);
+  } catch (err) {
+    console.error('Kleer individual sync error:', err);
+    res.status(400).json({ error: err.message || 'Kunde inte överföra utbetalning till Kleer.' });
   }
 });
 
