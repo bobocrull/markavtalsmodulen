@@ -8,7 +8,7 @@ import Templates from './pages/Templates';
 import { LogOut, LayoutDashboard, Layers, Inbox, ShieldAlert, FileText, Search } from 'lucide-react';
 import { useToast } from './components/Toast.jsx';
 import GlobalSearchModal from './components/GlobalSearchModal.jsx';
-import nektabLogoWhite from './assets/nektab_logo_white.png';
+import { nektabLogoWhiteData } from './assets/logoData.js';
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || '');
@@ -355,7 +355,7 @@ function App() {
       {/* Vänsterställd Sidebar */}
       <aside className="sidebar">
         <div className="sidebar-brand" style={{ cursor: 'pointer' }} onClick={navigateToDashboard}>
-          <img src={nektabLogoWhite} alt="NEKTAB" style={{ width: '100%', maxWidth: '130px', marginBottom: '0.25rem' }} />
+          <img src={nektabLogoWhiteData} alt="NEKTAB" style={{ width: '100%', maxWidth: '130px', height: 'auto', marginBottom: '0.25rem', display: 'block' }} />
           <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: 'var(--font-title)', display: 'block' }}>Markupplåtelse</span>
         </div>
 
