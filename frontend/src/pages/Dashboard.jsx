@@ -1510,7 +1510,7 @@ function Dashboard({
                   <option value="">-- Välj kollega i teamet --</option>
                   {usersList.map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.full_name ? `${u.full_name} (${u.username})` : u.username} — {u.role === 'admin' ? 'Projektadministratör' : 'Beredare'}
+                      {u.full_name ? `${u.full_name} (${u.username})` : u.username} — {u.role === 'admin' ? 'Projektadministratör' : 'Beredare'}{u.is_away ? ` [🌴 Frånvarande - Ersättare: ${u.backup_user_name || 'Ingen'}]` : ''}
                     </option>
                   ))}
                 </select>

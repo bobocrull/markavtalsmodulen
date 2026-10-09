@@ -5,11 +5,12 @@ import Dashboard from './pages/Dashboard';
 import ProjectDetails from './pages/ProjectDetails';
 import LandownerDetails from './pages/LandownerDetails';
 import Templates from './pages/Templates';
-import { LogOut, LayoutDashboard, Layers, Inbox, ShieldAlert, FileText, Search, Sparkles } from 'lucide-react';
+import { LogOut, LayoutDashboard, Layers, Inbox, ShieldAlert, FileText, Search, Sparkles, UserCheck, Palmtree } from 'lucide-react';
 import { useToast } from './components/Toast.jsx';
 import GlobalSearchModal from './components/GlobalSearchModal.jsx';
 import AnthropicConfigModal from './components/AnthropicConfigModal.jsx';
 import AiVisionScanModal from './components/AiVisionScanModal.jsx';
+import MyAccountModal from './components/MyAccountModal.jsx';
 import { nektabLogoWhiteData } from './assets/logoData.js';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import { Analytics } from '@vercel/analytics/react';
@@ -21,6 +22,7 @@ function App() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isAiConfigOpen, setIsAiConfigOpen] = useState(false);
   const [isAiVisionModalOpen, setIsAiVisionModalOpen] = useState(false);
+  const [isMyAccountOpen, setIsMyAccountOpen] = useState(false);
   
   // Enkel state-baserad router
   const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'projects', 'project', 'landowner', 'templates', 'inbox', 'gdpr'
@@ -482,22 +484,52 @@ function App() {
         </div>
 
         <div className="sidebar-footer">
-          <div className="sidebar-user">
-            <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '140px' }}>
-              <span className="username" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {user.full_name || user.username}
-              </span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.15rem' }}>
-                <span 
-                  className={`status-pill ${user.role === 'admin' ? 'status-pill-signed' : 'status-pill-processing'}`} 
-                  style={{ fontSize: '0.62rem', padding: '0.1rem 0.4rem', textTransform: 'uppercase' }}
-                >
-                  {user.role === 'admin' ? 'PROJEKTADMIN' : 'BEREDARE'}
+          <div className="sidebar-user" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.65rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '145px' }}>
+                <span className="username" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }}>
+                  {user.full_name || user.username}
                 </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.2rem', flexWrap: 'wrap' }}>
+                  <span 
+                    className={`status-pill ${user.role === 'admin' ? 'status-pill-signed' : 'status-pill-processing'}`} 
+                    style={{ fontSize: '0.62rem', padding: '0.1rem 0.4rem', textTransform: 'uppercase' }}
+                  >
+                    {user.role === 'admin' ? 'PROJEKTADMIN' : 'BEREDARE'}
+                  </span>
+                  {user.is_away ? (
+                    <span style={{ fontSize: '0.62rem', backgroundColor: 'rgba(245, 158, 11, 0.2)', color: 'var(--color-warning)', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: 700 }}>
+                      LEDIG
+                    </span>
+                  ) : null}
+                </div>
               </div>
+              <button className="btn btn-danger btn-icon-only btn-sm" title="Logga ut" onClick={handleLogout} style={{ clipPath: 'none' }}>
+                <LogOut size={14} />
+              </button>
             </div>
-            <button className="btn btn-danger btn-icon-only btn-sm" title="Logga ut" onClick={handleLogout} style={{ clipPath: 'none' }}>
-              <LogOut size={14} />
+
+            <button 
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setIsMyAccountOpen(true)}
+              style={{
+                width: '100%',
+                fontSize: '0.74rem',
+                padding: '0.35rem 0.5rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.4rem',
+                borderColor: user.is_away ? 'rgba(245, 158, 11, 0.4)' : 'rgba(95, 200, 145, 0.35)',
+                color: user.is_away ? 'var(--color-warning)' : 'var(--color-accent)',
+                backgroundColor: 'rgba(0,0,0,0.2)',
+                textTransform: 'none',
+                fontWeight: 600
+              }}
+              title="Öppna Mitt konto, ändra uppgifter eller lägg in frånvarospärr"
+            >
+              <UserCheck size={13} /> Mitt konto
             </button>
           </div>
         </div>
@@ -505,6 +537,41 @@ function App() {
 
       {/* Huvudinnehåll till höger */}
       <main className="main-content">
+        {user?.is_away ? (
+          <div style={{
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            border: '1px solid rgba(245, 158, 11, 0.3)',
+            borderRadius: '8px',
+            padding: '0.65rem 1rem',
+            marginBottom: '1.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.75rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <span style={{ fontSize: '1.1rem' }}>🌴</span>
+              <div>
+                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'white' }}>
+                  Tillfällig frånvarospärr aktiv:
+                </span>
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginLeft: '0.4rem' }}>
+                  {user.away_message || 'Du är markerad som ledig.'} 
+                  {user.backup_user_name ? ` (Projekt styrs automatiskt till: ${user.backup_user_name})` : ''}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              style={{ fontSize: '0.72rem', padding: '0.25rem 0.6rem', color: 'var(--color-warning)', borderColor: 'rgba(245, 158, 11, 0.4)' }}
+              onClick={() => setIsMyAccountOpen(true)}
+            >
+              Hantera frånvaro i Mitt konto
+            </button>
+          </div>
+        ) : null}
         {currentView === 'dashboard' && (
           <Dashboard 
             token={token} 
@@ -866,6 +933,17 @@ function App() {
         token={token}
         onSuccess={() => {
           if (fetchAllLandowners) fetchAllLandowners();
+        }}
+      />
+
+      {/* Mitt konto & Handläggarprofil Modal */}
+      <MyAccountModal
+        isOpen={isMyAccountOpen}
+        onClose={() => setIsMyAccountOpen(false)}
+        token={token}
+        user={user}
+        onUserUpdated={(updatedUser) => {
+          setUser(updatedUser);
         }}
       />
 

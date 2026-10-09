@@ -387,6 +387,23 @@ function initializeDatabase() {
       )
     `);
 
+    // Migreringar för användarprofil, frånvarospärr och delegering
+    const userMigrations = [
+      "ALTER TABLE users ADD COLUMN full_name TEXT",
+      "ALTER TABLE users ADD COLUMN email TEXT",
+      "ALTER TABLE users ADD COLUMN phone TEXT",
+      "ALTER TABLE users ADD COLUMN is_away INTEGER DEFAULT 0",
+      "ALTER TABLE users ADD COLUMN away_start_date TEXT",
+      "ALTER TABLE users ADD COLUMN away_end_date TEXT",
+      "ALTER TABLE users ADD COLUMN away_message TEXT",
+      "ALTER TABLE users ADD COLUMN backup_user_id INTEGER",
+      "ALTER TABLE projects ADD COLUMN assigned_user_id INTEGER"
+    ];
+
+    userMigrations.forEach((query) => {
+      db.run(query, () => {});
+    });
+
     // Lägg till testanvändare om tabellen är tom
     db.get("SELECT COUNT(*) as count FROM users", (err, row) => {
       if (err) {

@@ -324,25 +324,165 @@ app.post('/api/auth/login', (req, res) => {
 });
 
 app.get('/api/auth/me', authenticateToken, (req, res) => {
-  db.get("SELECT id, username, role, full_name, email FROM users WHERE id = ?", [req.user.id], (err, user) => {
-    if (!err && user) {
-      res.json({ user: { ...user, full_name: user.full_name || user.username } });
-    } else {
-      res.json({ user: req.user });
+  db.get(
+    `SELECT u.id, u.username, u.role, u.full_name, u.email, u.phone, u.is_away, u.away_start_date, u.away_end_date, u.away_message, u.backup_user_id,
+            (SELECT COALESCE(b.full_name, b.username) FROM users b WHERE b.id = u.backup_user_id) as backup_user_name
+     FROM users u WHERE u.id = ?`,
+    [req.user.id],
+    (err, user) => {
+      if (!err && user) {
+        res.json({ user: { ...user, full_name: user.full_name || user.username } });
+      } else {
+        res.json({ user: req.user });
+      }
     }
+  );
+});
+
+// Uppdatera användarens profil, kontaktuppgifter och frånvarospärr
+app.put('/api/auth/profile', authenticateToken, (req, res) => {
+  const userId = req.user.id;
+  const {
+    full_name,
+    email,
+    phone,
+    password,
+    is_away,
+    away_start_date,
+    away_end_date,
+    away_message,
+    backup_user_id,
+    delegate_active_projects
+  } = req.body;
+
+  db.get("SELECT * FROM users WHERE id = ?", [userId], (err, currentUser) => {
+    if (err || !currentUser) {
+      return res.status(404).json({ error: 'Användaren hittades inte.' });
+    }
+
+    const cleanFullName = full_name !== undefined ? full_name.trim() : (currentUser.full_name || currentUser.username);
+    const cleanEmail = email !== undefined ? email.trim() : (currentUser.email || '');
+    const cleanPhone = phone !== undefined ? phone.trim() : (currentUser.phone || '');
+    const awayStatus = is_away ? 1 : 0;
+    const cleanStartDate = away_start_date || '';
+    const cleanEndDate = away_end_date || '';
+    const cleanAwayMessage = away_message || '';
+    const backupId = backup_user_id ? parseInt(backup_user_id, 10) : null;
+
+    let newPasswordHash = currentUser.password_hash;
+    if (password && password.trim().length > 0) {
+      if (password.trim().length < 6) {
+        return res.status(400).json({ error: 'Nytt lösenord måste vara minst 6 tecken.' });
+      }
+      newPasswordHash = bcrypt.hashSync(password.trim(), 10);
+    }
+
+    db.run(
+      `UPDATE users SET 
+        full_name = ?, 
+        email = ?, 
+        phone = ?, 
+        password_hash = ?, 
+        is_away = ?, 
+        away_start_date = ?, 
+        away_end_date = ?, 
+        away_message = ?, 
+        backup_user_id = ? 
+       WHERE id = ?`,
+      [
+        cleanFullName,
+        cleanEmail,
+        cleanPhone,
+        newPasswordHash,
+        awayStatus,
+        cleanStartDate,
+        cleanEndDate,
+        cleanAwayMessage,
+        backupId,
+        userId
+      ],
+      async function(updateErr) {
+        if (updateErr) {
+          console.error('Kunde inte uppdatera profil:', updateErr);
+          return res.status(500).json({ error: 'Kunde inte spara profiländringar.' });
+        }
+
+        let delegatedCount = 0;
+        let backupUserName = null;
+
+        // Om användaren valde att automatiskt delegera sina aktiva projekt till ställföreträdaren vid frånvaro
+        if (delegate_active_projects && awayStatus === 1 && backupId) {
+          try {
+            const backupUser = await new Promise((resolve) => {
+              db.get("SELECT id, username, full_name FROM users WHERE id = ?", [backupId], (e, r) => resolve(r));
+            });
+
+            if (backupUser) {
+              backupUserName = backupUser.full_name || backupUser.username;
+              await new Promise((resolve) => {
+                db.run(
+                  "UPDATE projects SET assigned_user_id = ?, lead_preparer = ? WHERE assigned_user_id = ?",
+                  [backupId, backupUserName, userId],
+                  function() {
+                    delegatedCount = this && this.changes ? this.changes : 0;
+                    resolve();
+                  }
+                );
+              });
+            }
+          } catch (delErr) {
+            console.error('Fel vid massdelegering av projekt vid frånvaro:', delErr);
+          }
+        }
+
+        // Hämta den uppdaterade användaren
+        db.get(
+          `SELECT u.id, u.username, u.role, u.full_name, u.email, u.phone, u.is_away, u.away_start_date, u.away_end_date, u.away_message, u.backup_user_id,
+                  (SELECT COALESCE(b.full_name, b.username) FROM users b WHERE b.id = u.backup_user_id) as backup_user_name
+           FROM users u WHERE u.id = ?`,
+          [userId],
+          (fetchErr, updatedUser) => {
+            const token = jwt.sign(
+              { id: updatedUser.id, username: updatedUser.username, role: updatedUser.role, full_name: updatedUser.full_name || updatedUser.username },
+              JWT_SECRET,
+              { expiresIn: '8h' }
+            );
+
+            let msg = 'Dina kontouppgifter har uppdaterats!';
+            if (delegatedCount > 0 && backupUserName) {
+              msg += ` ${delegatedCount} projekt delegerades automatiskt till ${backupUserName}.`;
+            }
+
+            res.json({
+              success: true,
+              message: msg,
+              user: updatedUser,
+              token,
+              delegatedProjectsCount: delegatedCount
+            });
+          }
+        );
+      }
+    );
   });
 });
 
-// Hämta alla användare (för tilldelning och delegering)
+// Hämta alla användare (för tilldelning, delegering och ställföreträdare)
 app.get('/api/users', authenticateToken, (req, res) => {
-  db.all("SELECT id, username, role, full_name, email FROM users ORDER BY username ASC", [], (err, rows) => {
-    if (err) return res.status(500).json({ error: 'Kunde inte hämta användare.' });
-    const formatted = (rows || []).map(u => ({
-      ...u,
-      full_name: u.full_name || u.username
-    }));
-    res.json(formatted);
-  });
+  db.all(
+    `SELECT u.id, u.username, u.role, u.full_name, u.email, u.phone, u.is_away, u.away_start_date, u.away_end_date, u.away_message, u.backup_user_id,
+            (SELECT COALESCE(b.full_name, b.username) FROM users b WHERE b.id = u.backup_user_id) as backup_user_name
+     FROM users u ORDER BY u.username ASC`,
+    [],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: 'Kunde inte hämta användare.' });
+      const formatted = (rows || []).map(u => ({
+        ...u,
+        full_name: u.full_name || u.username
+      }));
+      res.json(formatted);
+    }
+  );
 });
 
 // ----------------------------------------------------
@@ -638,36 +778,52 @@ app.put('/api/projects/:id/delegate', authenticateToken, requireAdmin, (req, res
     return res.status(400).json({ error: 'Mottagande användare (assigned_user_id eller user_id) krävs.' });
   }
 
-  db.get("SELECT id, username, full_name, role FROM users WHERE id = ?", [targetUserId], (err, targetUser) => {
-    if (err || !targetUser) {
-      return res.status(404).json({ error: 'Mottagande användare hittades inte.' });
-    }
-
-    const assignedName = targetUser.full_name || targetUser.username;
-
-    db.run(
-      "UPDATE projects SET assigned_user_id = ?, lead_preparer = ? WHERE id = ?",
-      [targetUser.id, assignedName, projectId],
-      function (err) {
-        if (err) return res.status(500).json({ error: 'Kunde inte delegera projektet.' });
-
-        // Säkerställ koppling i project_assignments
-        db.run(
-          "INSERT INTO project_assignments (project_id, user_id) VALUES (?, ?)",
-          [projectId, targetUser.id],
-          () => {}
-        );
-
-        res.json({
-          success: true,
-          message: `Projektet har delegerats till ${assignedName}!`,
-          assigned_user_id: targetUser.id,
-          assigned_user_name: assignedName,
-          lead_preparer: assignedName
-        });
+  db.get(
+    `SELECT u.id, u.username, u.full_name, u.role, u.is_away, u.away_message, u.backup_user_id,
+            (SELECT COALESCE(b.full_name, b.username) FROM users b WHERE b.id = u.backup_user_id) as backup_user_name
+     FROM users u WHERE u.id = ?`,
+    [targetUserId],
+    (err, targetUser) => {
+      if (err || !targetUser) {
+        return res.status(404).json({ error: 'Mottagande användare hittades inte.' });
       }
-    );
-  });
+
+      // Om vald användare har en aktiv frånvarospärr och har en ställföreträdare vald
+      let finalAssigneeId = targetUser.id;
+      let assignedName = targetUser.full_name || targetUser.username;
+      let awayNotice = '';
+
+      if (targetUser.is_away && targetUser.backup_user_id && targetUser.backup_user_name) {
+        finalAssigneeId = targetUser.backup_user_id;
+        assignedName = targetUser.backup_user_name;
+        awayNotice = ` (Automatiskt vidareskickat eftersom ${targetUser.full_name || targetUser.username} har frånvarospärr aktiv: "${targetUser.away_message || 'Ledig'}")`;
+      }
+
+      db.run(
+        "UPDATE projects SET assigned_user_id = ?, lead_preparer = ? WHERE id = ?",
+        [finalAssigneeId, assignedName, projectId],
+        function (updErr) {
+          if (updErr) return res.status(500).json({ error: 'Kunde inte delegera projektet.' });
+
+          // Säkerställ koppling i project_assignments
+          db.run(
+            "INSERT INTO project_assignments (project_id, user_id) VALUES (?, ?)",
+            [projectId, finalAssigneeId],
+            () => {}
+          );
+
+          res.json({
+            success: true,
+            message: `Projektet har delegerats till ${assignedName}!${awayNotice}`,
+            assigned_user_id: finalAssigneeId,
+            assigned_user_name: assignedName,
+            lead_preparer: assignedName,
+            was_redirected: Boolean(awayNotice)
+          });
+        }
+      );
+    }
+  );
 });
 
 // Ta bort ett projekt (endast administratör)
