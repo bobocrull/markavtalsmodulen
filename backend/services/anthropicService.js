@@ -9,9 +9,36 @@ const path = require('path');
 
 let anthropicClient = null;
 
+let hardcodedKey = '';
+try {
+  const aiConfig = require('../aiConfig');
+  if (aiConfig && aiConfig.HARDCODED_ANTHROPIC_API_KEY) {
+    hardcodedKey = aiConfig.HARDCODED_ANTHROPIC_API_KEY.trim();
+  }
+} catch (e) {}
+
+function getApiKey() {
+  const envKey = process.env.ANTHROPIC_API_KEY ? process.env.ANTHROPIC_API_KEY.trim() : '';
+  if (envKey && envKey.length > 10) return envKey;
+  if (hardcodedKey && hardcodedKey.length > 10) return hardcodedKey;
+  return '';
+}
+
+function setRuntimeApiKey(key) {
+  if (key && typeof key === 'string') {
+    process.env.ANTHROPIC_API_KEY = key.trim();
+    anthropicClient = null;
+  }
+}
+
+function isConfigured() {
+  const key = getApiKey();
+  return Boolean(key && key.length > 10);
+}
+
 function getClient() {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey || apiKey.trim() === '') {
+  const apiKey = getApiKey();
+  if (!apiKey) {
     return null;
   }
   if (!Anthropic) {
@@ -26,11 +53,6 @@ function getClient() {
     anthropicClient = new Anthropic({ apiKey });
   }
   return anthropicClient;
-}
-
-function isConfigured() {
-  const key = process.env.ANTHROPIC_API_KEY;
-  return Boolean(key && key.trim().length > 10);
 }
 
 /**
@@ -502,6 +524,8 @@ function getWeekNumber(d) {
 
 module.exports = {
   isConfigured,
+  getApiKey,
+  setRuntimeApiKey,
   analyzeScannedAgreement,
   generateWeeklyReport,
   auditProjectDelivery,

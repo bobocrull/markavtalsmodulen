@@ -188,7 +188,7 @@ export default function AnthropicConfigModal({ isOpen, onClose, token, onKeySave
               }}
             />
             <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.35rem' }}>
-              Nyckeln sparas säkert i backend och används för din $100/mån utvecklarbudget.
+              Nyckeln sparas centralt i databasen och gäller automatiskt för alla användare på plattformen.
             </span>
           </div>
 

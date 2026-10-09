@@ -375,6 +375,15 @@ function initializeDatabase() {
       )
     `);
 
+    // 12. system_settings (Persistent konfiguration t.ex. central AI API-nyckel)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Lägg till testanvändare om tabellen är tom
     db.get("SELECT COUNT(*) as count FROM users", (err, row) => {
       if (err) {

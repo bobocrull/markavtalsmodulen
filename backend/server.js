@@ -1955,8 +1955,27 @@ app.post('/api/admin/reset-mock-data', authenticateToken, (req, res) => {
   }
 });
 
+// Helper för att säkerställa att AI-nyckeln är laddad från DB om den saknas i runtime/process.env
+async function ensureAiKeyLoaded() {
+  if (anthropicService.isConfigured()) return true;
+  return new Promise((resolve) => {
+    db.get("SELECT value FROM system_settings WHERE key = ?", ['ANTHROPIC_API_KEY'], (err, row) => {
+      if (!err && row && row.value && row.value.trim().length > 10) {
+        anthropicService.setRuntimeApiKey(row.value.trim());
+        resolve(true);
+      } else {
+        resolve(false);
+      }
+    });
+  });
+}
+
+// Försök ladda eventuell sparad AI-nyckel direkt vid uppstart
+ensureAiKeyLoaded().then(() => {}).catch(() => {});
+
 // Status för Anthropic API-nyckel
-app.get('/api/admin/anthropic/status', authenticateToken, (req, res) => {
+app.get('/api/admin/anthropic/status', authenticateToken, async (req, res) => {
+  await ensureAiKeyLoaded();
   res.json({
     configured: anthropicService.isConfigured(),
     model: 'claude-3-5-sonnet-20241022',
@@ -1971,9 +1990,19 @@ app.post('/api/admin/anthropic/config', authenticateToken, (req, res) => {
     return res.status(400).json({ error: 'Ogiltig Anthropic API-nyckel.' });
   }
 
-  process.env.ANTHROPIC_API_KEY = api_key.trim();
+  const cleanKey = api_key.trim();
+  anthropicService.setRuntimeApiKey(cleanKey);
 
-  // Skriv till .env så att den sparas permanent
+  // 1. Spara persistent i databasen (system_settings) så att ALLA användare och alla serverless-instanser delar nyckeln
+  db.get("SELECT key FROM system_settings WHERE key = ?", ['ANTHROPIC_API_KEY'], (err, row) => {
+    if (row) {
+      db.run("UPDATE system_settings SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?", [cleanKey, 'ANTHROPIC_API_KEY']);
+    } else {
+      db.run("INSERT INTO system_settings (key, value) VALUES (?, ?)", ['ANTHROPIC_API_KEY', cleanKey]);
+    }
+  });
+
+  // 2. Skriv till .env om filsystemet tillåter det (lokal utveckling)
   try {
     const envPath = path.join(__dirname, '.env');
     let envContent = '';
@@ -1981,24 +2010,25 @@ app.post('/api/admin/anthropic/config', authenticateToken, (req, res) => {
       envContent = fs.readFileSync(envPath, 'utf8');
     }
     if (envContent.includes('ANTHROPIC_API_KEY=')) {
-      envContent = envContent.replace(/ANTHROPIC_API_KEY=.*/g, `ANTHROPIC_API_KEY=${api_key.trim()}`);
+      envContent = envContent.replace(/ANTHROPIC_API_KEY=.*/g, `ANTHROPIC_API_KEY=${cleanKey}`);
     } else {
-      envContent += `\nANTHROPIC_API_KEY=${api_key.trim()}\n`;
+      envContent += `\nANTHROPIC_API_KEY=${cleanKey}\n`;
     }
     fs.writeFileSync(envPath, envContent.trim() + '\n', 'utf8');
   } catch (err) {
-    console.warn('Kunde inte skriva ANTHROPIC_API_KEY till .env:', err.message);
+    // Ignorera tyst i read-only miljöer (t.ex. Vercel serverless)
   }
 
   res.json({
     success: true,
     configured: true,
-    message: 'Anthropic API-nyckel sparad och aktiverad!'
+    message: 'Anthropic API-nyckel sparad och aktiverad för alla användare!'
   });
 });
 
 // 1. Claude Vision: Signatur- & Returgranskare för inskannat avtal
 app.post('/api/admin/anthropic/scan-agreement', authenticateToken, memoryUpload.single('file'), async (req, res) => {
+  await ensureAiKeyLoaded();
   const { landowner_id, project_id, save_updates } = req.body;
 
   try {
@@ -2074,6 +2104,7 @@ app.post('/api/admin/anthropic/scan-agreement', authenticateToken, memoryUpload.
 
 // 2. Ett-klicks Veckorapport till Nätägare (Vattenfall / Ellevio PM)
 app.post('/api/admin/anthropic/weekly-report/:projectId', authenticateToken, async (req, res) => {
+  await ensureAiKeyLoaded();
   const projectId = req.params.projectId;
 
   try {
@@ -2100,6 +2131,7 @@ app.post('/api/admin/anthropic/weekly-report/:projectId', authenticateToken, asy
 
 // 3. Pre-Flight Slutgranskning inför Lantmäteriet & Nätägaren
 app.post('/api/admin/anthropic/audit-project/:projectId', authenticateToken, async (req, res) => {
+  await ensureAiKeyLoaded();
   const projectId = req.params.projectId;
 
   try {
@@ -2132,6 +2164,7 @@ app.post('/api/admin/anthropic/audit-project/:projectId', authenticateToken, asy
 
 // 4. Dödsbo- & Fullmaktsanalys
 app.post('/api/admin/anthropic/analyze-estate', authenticateToken, memoryUpload.single('file'), async (req, res) => {
+  await ensureAiKeyLoaded();
   const { property_designation } = req.body;
 
   try {
@@ -2166,6 +2199,7 @@ app.post('/api/admin/anthropic/analyze-estate', authenticateToken, memoryUpload.
 
 // 5. Administrativ Morgon-Radar (Portfolio Briefing)
 app.get('/api/admin/admin-radar', authenticateToken, async (req, res) => {
+  await ensureAiKeyLoaded();
   try {
     const projects = await new Promise((resolve) => {
       const q = `
