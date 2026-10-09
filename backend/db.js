@@ -1,6 +1,7 @@
 const path = require('path');
 const bcrypt = require('bcryptjs');
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
+types.setTypeParser(20, (val) => parseInt(val, 10));
 const { seedMockData } = require('./seedData');
 
 const databaseUrl = process.env.DATABASE_URL;

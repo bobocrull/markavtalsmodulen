@@ -432,8 +432,8 @@ Svara ENDAST med ett giltigt JSON-objekt:
 async function generatePortfolioRadar({ projects = [], stats = {}, pendingReturns = [] }) {
   const client = getClient();
   const activeProjectsCount = projects.length;
-  const totalLandowners = projects.reduce((acc, p) => acc + (p.total_landowners || 0), 0);
-  const totalSigned = projects.reduce((acc, p) => acc + (p.signed_landowners || 0), 0);
+  const totalLandowners = projects.reduce((acc, p) => acc + (Number(p.total_landowners) || 0), 0);
+  const totalSigned = projects.reduce((acc, p) => acc + (Number(p.signed_landowners) || 0), 0);
 
   // Samla åtgärder
   const urgentItems = [];

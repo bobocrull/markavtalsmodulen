@@ -336,7 +336,21 @@ app.get('/api/projects', authenticateToken, (req, res) => {
   `;
   db.all(query, [], (err, rows) => {
     if (err) return res.status(500).json({ error: 'Kunde inte hämta projekt.' });
-    res.json(rows);
+    const formatted = (rows || []).map((r) => ({
+      ...r,
+      total_landowners: Number(r.total_landowners) || 0,
+      signed_landowners: Number(r.signed_landowners) || 0,
+      draft_count: Number(r.draft_count) || 0,
+      queued_count: Number(r.queued_count) || 0,
+      posted_count: Number(r.posted_count) || 0,
+      received_count: Number(r.received_count) || 0,
+      signed_count: Number(r.signed_count) || 0,
+      paid_count: Number(r.paid_count) || 0,
+      easement_count: Number(r.easement_count) || 0,
+      delivered_count: Number(r.delivered_count) || 0,
+      archived_count: Number(r.archived_count) || 0
+    }));
+    res.json(formatted);
   });
 });
 

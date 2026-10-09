@@ -856,7 +856,7 @@ function Dashboard({
           <div>
             <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-title)', textTransform: 'uppercase' }}>Markägare i process</p>
             <p style={{ fontSize: '1.6rem', fontWeight: 'bold', color: 'white', fontFamily: 'var(--font-title)' }}>
-              {projects.reduce((acc, curr) => acc + (curr.total_landowners || 0), 0) || 12} st <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: '#60a5fa', display: 'block' }}>Pågående beredningar</span>
+              {projects.reduce((acc, curr) => acc + (Number(curr.total_landowners) || 0), 0)} st <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: '#60a5fa', display: 'block' }}>Pågående beredningar</span>
             </p>
           </div>
         </div>
