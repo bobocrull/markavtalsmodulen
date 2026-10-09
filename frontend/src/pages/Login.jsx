@@ -252,7 +252,7 @@ function Login({ setToken }) {
                       type="text" 
                       className="form-input" 
                       style={{ paddingLeft: '35px' }}
-                      placeholder="T.ex. admin eller beredare..."
+                      placeholder="Ange användarnamn..."
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       required
@@ -452,13 +452,6 @@ function Login({ setToken }) {
               </>
             )}
           </form>
-
-          {mode === 'login' && (
-            <div style={{ marginTop: '1.5rem', fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-              <p style={{ marginBottom: '0.25rem' }}>Standardkonton:</p>
-              <p>admin / admin123 (Admin) • beredare / beredare123 (Beredare)</p>
-            </div>
-          )}
         </div>
       </div>
     </div>
