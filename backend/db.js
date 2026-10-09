@@ -15,17 +15,24 @@ if (isPostgres) {
     ssl: { rejectUnauthorized: false }
   });
 } else {
-  const sqlite3 = require('sqlite3').verbose();
-  console.log('Ansluter till lokal SQLite-databas...');
-  const dbPath = path.resolve(__dirname, 'database.sqlite');
-  sqliteDb = new sqlite3.Database(dbPath, (err) => {
-    if (err) {
-      console.error('Kunde inte ansluta till SQLite-databasen:', err.message);
-    } else {
-      console.log('Ansluten till SQLite-databasen.');
-      initializeDatabase();
-    }
-  });
+  let sqlite3 = null;
+  try {
+    sqlite3 = require('sqlite3').verbose();
+  } catch (err) {
+    console.warn('SQLite3 är inte installerat i denna miljö (Vercel serverless). Kontrollera att DATABASE_URL är satt.');
+  }
+  if (sqlite3) {
+    console.log('Ansluter till lokal SQLite-databas...');
+    const dbPath = path.resolve(__dirname, 'database.sqlite');
+    sqliteDb = new sqlite3.Database(dbPath, (err) => {
+      if (err) {
+        console.error('Kunde inte ansluta till SQLite-databasen:', err.message);
+      } else {
+        console.log('Ansluten till SQLite-databasen.');
+        initializeDatabase();
+      }
+    });
+  }
 }
 
 // Helper to translate query placeholders and append RETURNING id on INSERT

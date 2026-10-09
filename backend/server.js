@@ -2034,7 +2034,7 @@ app.post('/api/admin/anthropic/scan-agreement', authenticateToken, memoryUpload.
       }
 
       db.run(
-        "INSERT INTO crm_communication_logs (landowner_id, user_id, log_type, summary, description) VALUES (?, ?, 'note', 'AI-Vision Avtalsgranskning', ?)",
+        "INSERT INTO communication_logs (landowner_id, user_id, log_type, summary, description) VALUES (?, ?, 'note', 'AI-Vision Avtalsgranskning', ?)",
         [landowner_id, req.user?.id || 1, `Claude Vision granskade avtalet: Status ${result.status}. ${result.summary}`]
       );
     }
@@ -2245,7 +2245,7 @@ process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception kastad:', error);
 });
 
-if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
+if (require.main === module) {
   app.listen(PORT, async () => {
     await ensureMockPdfFiles();
     console.log(`Server körs på port ${PORT}`);

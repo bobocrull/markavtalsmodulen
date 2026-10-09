@@ -5,6 +5,7 @@
     "build": "cd frontend && npm install && npm run build"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
     "express": "^4.19.2",
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.5",

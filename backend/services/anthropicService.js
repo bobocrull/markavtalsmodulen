@@ -1,4 +1,9 @@
-const Anthropic = require('@anthropic-ai/sdk');
+let Anthropic = null;
+try {
+  Anthropic = require('@anthropic-ai/sdk');
+} catch (e) {
+  console.warn('Varning: @anthropic-ai/sdk kunde inte laddas i runtime:', e.message);
+}
 const fs = require('fs');
 const path = require('path');
 
@@ -8,6 +13,14 @@ function getClient() {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey || apiKey.trim() === '') {
     return null;
+  }
+  if (!Anthropic) {
+    try {
+      Anthropic = require('@anthropic-ai/sdk');
+    } catch (e) {
+      console.warn('@anthropic-ai/sdk inte tillgänglig:', e.message);
+      return null;
+    }
   }
   if (!anthropicClient || anthropicClient.apiKey !== apiKey) {
     anthropicClient = new Anthropic({ apiKey });
