@@ -159,6 +159,13 @@ function initializeDatabase() {
         center_longitude REAL,
         zoom_level INTEGER DEFAULT 12,
         route_coordinates TEXT,
+        network_owner TEXT,
+        nis_number TEXT,
+        line_littera TEXT,
+        substation_numbers TEXT,
+        client_pm TEXT,
+        lead_preparer TEXT,
+        municipality TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -186,6 +193,9 @@ function initializeDatabase() {
         email TEXT,
         phone TEXT,
         bank_account TEXT,
+        share TEXT,
+        lm_case_number TEXT,
+        notes TEXT,
         status TEXT NOT NULL DEFAULT 'draft',
         completed_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -214,6 +224,11 @@ function initializeDatabase() {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         landowner_id INTEGER NOT NULL,
         designation TEXT NOT NULL,
+        municipality TEXT,
+        property_type TEXT,
+        type_code TEXT,
+        fnr TEXT,
+        assessed_owner TEXT,
         area REAL,
         latitude REAL,
         longitude REAL,
@@ -240,21 +255,36 @@ function initializeDatabase() {
       )
     `);
 
-    // In PostgreSQL, ALTER TABLE queries will throw an error if the column already exists.
-    // We run them but ignore the error if it fails since the column already exists or is initialized in table definitions.
-    if (!isPostgres) {
-      db.run("ALTER TABLE documents ADD COLUMN property_designation TEXT", (err) => {
-        // Ignorera om kolumnen redan finns
-      });
+    // In PostgreSQL / SQLite, migration columns for existing databases
+    const alterQueries = [
+      "ALTER TABLE documents ADD COLUMN property_designation TEXT",
+      "ALTER TABLE projects ADD COLUMN route_coordinates TEXT",
+      "ALTER TABLE projects ADD COLUMN network_owner TEXT",
+      "ALTER TABLE projects ADD COLUMN nis_number TEXT",
+      "ALTER TABLE projects ADD COLUMN line_littera TEXT",
+      "ALTER TABLE projects ADD COLUMN substation_numbers TEXT",
+      "ALTER TABLE projects ADD COLUMN client_pm TEXT",
+      "ALTER TABLE projects ADD COLUMN lead_preparer TEXT",
+      "ALTER TABLE projects ADD COLUMN municipality TEXT",
+      "ALTER TABLE properties ADD COLUMN municipality TEXT",
+      "ALTER TABLE properties ADD COLUMN property_type TEXT",
+      "ALTER TABLE properties ADD COLUMN type_code TEXT",
+      "ALTER TABLE properties ADD COLUMN fnr TEXT",
+      "ALTER TABLE properties ADD COLUMN assessed_owner TEXT",
+      "ALTER TABLE landowners ADD COLUMN share TEXT",
+      "ALTER TABLE landowners ADD COLUMN lm_case_number TEXT",
+      "ALTER TABLE landowners ADD COLUMN notes TEXT",
+      "ALTER TABLE land_valuations ADD COLUMN calculator_data TEXT"
+    ];
 
-      db.run("ALTER TABLE projects ADD COLUMN route_coordinates TEXT", (err) => {
-        // Ignorera om kolumnen redan finns
-      });
-
-      db.run("ALTER TABLE land_valuations ADD COLUMN calculator_data TEXT", (err) => {
-        // Ignorera om kolumnen redan finns
-      });
-    }
+    alterQueries.forEach((query) => {
+      if (isPostgres) {
+        const pgQuery = query.replace('ADD COLUMN', 'ADD COLUMN IF NOT EXISTS');
+        db.run(pgQuery, () => {});
+      } else {
+        db.run(query, () => {});
+      }
+    });
 
     db.run(`
       CREATE TABLE IF NOT EXISTS communication_logs (
@@ -305,6 +335,25 @@ function initializeDatabase() {
         due_date TEXT,
         status TEXT DEFAULT 'pending',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (landowner_id) REFERENCES landowners(id) ON DELETE CASCADE
+      )
+    `);
+
+    // 11. project_permits (Sidoavtal & myndighetstillstånd: ABEL07, Korsningsavtal, Bygglov, LST Samråd, Strandskydd, Vattenverksamhet)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS project_permits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL,
+        landowner_id INTEGER,
+        property_designation TEXT,
+        permit_type TEXT NOT NULL,
+        title TEXT,
+        sent_date TEXT,
+        approved_date TEXT,
+        status TEXT DEFAULT 'pending',
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
         FOREIGN KEY (landowner_id) REFERENCES landowners(id) ON DELETE CASCADE
       )
     `);

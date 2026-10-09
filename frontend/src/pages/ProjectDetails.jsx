@@ -3,6 +3,7 @@ import { API_BASE_URL } from '../config';
 import MapWidget from '../components/MapWidget';
 import { ArrowLeft, UserPlus, Trash2, FileText, Upload, Plus, Users, Layout, Shield, FileCheck, Layers, ClipboardList, Info, FileSpreadsheet, Download, ArrowUpDown, SlidersHorizontal, CheckCircle2, Zap, CreditCard, RefreshCw } from 'lucide-react';
 import { useToast } from '../components/Toast.jsx';
+import VattenfallImportModal from '../components/VattenfallImportModal';
 
 function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashboard }) {
   const { showToast } = useToast();
@@ -11,6 +12,8 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
   const [collaborators, setCollaborators] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
   const [projDocs, setProjDocs] = useState([]);
+  const [projectPermits, setProjectPermits] = useState([]);
+  const [showVattenfallModal, setShowVattenfallModal] = useState(false);
 
   // States för formulär / modal
   const [showOwnerModal, setShowOwnerModal] = useState(false);
@@ -31,7 +34,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
   const [docType, setDocType] = useState('template');
   const [requiresShipping, setRequiresShipping] = useState(true);
   const [selectedOwners, setSelectedOwners] = useState([]);
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'landowners', 'properties', 'payout', 'settings'
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'landowners', 'properties', 'payout', 'permits', 'settings'
   const [kleerBatchSyncing, setKleerBatchSyncing] = useState(false);
   const [kleerBatchReceipt, setKleerBatchReceipt] = useState(null);
   const [payoutFilter, setPayoutFilter] = useState('all'); // 'all', 'signed', 'paid', 'missing_bank'
@@ -128,11 +131,47 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
       const allDocs = await docsRes.json();
       setProjDocs(allDocs);
 
+      try {
+        const permRes = await fetch(`${API_BASE_URL}/api/projects/${projectId}/permits`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (permRes.ok) {
+          const permData = await permRes.json();
+          setProjectPermits(permData);
+        }
+      } catch (e) {
+        console.error('Kunde inte läsa tillstånd:', e);
+      }
+
     } catch (err) {
       console.error(err);
       setError('Kunde inte läsa projektdata från servern.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExportVattenfall = async () => {
+    try {
+      showToast('Genererar Vattenfalls Markägarförteckning...', 'info');
+      const res = await fetch(`${API_BASE_URL}/api/projects/${projectId}/export-vattenfall`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Kunde inte generera Vattenfall-mall.');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const nis = (project?.nis_number || `P${projectId}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+      a.download = `Markagarforteckning_${nis}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      showToast('Vattenfall-mall exporterad som .xlsx!', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast(err.message || 'Kunde inte exportera filen.', 'error');
     }
   };
 
@@ -732,39 +771,93 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
         <div>
           <h1 className="page-title">{project.name}</h1>
           <p className="page-subtitle" style={{ fontSize: '0.85rem' }}>
-            Etapptyp: <strong style={{ color: 'white' }}>{project.project_type.toUpperCase()}</strong> | Geografi: Höganäs, Skåne
+            Etapptyp: <strong style={{ color: 'white' }}>{project.project_type.toUpperCase()}</strong> | Geografi: {project.municipality || 'Höganäs, Skåne'}
           </p>
+
+          {/* Vattenfall Metadata Badges */}
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.6rem', alignItems: 'center' }}>
+            {project.nis_number && (
+              <span style={{ fontSize: '0.72rem', backgroundColor: '#1e3a2b', color: 'var(--color-accent)', padding: '0.2rem 0.55rem', borderRadius: '4px', fontFamily: 'monospace', border: '1px solid rgba(95, 200, 145, 0.3)' }}>
+                NIS: {project.nis_number}
+              </span>
+            )}
+            {project.network_owner && (
+              <span style={{ fontSize: '0.72rem', backgroundColor: '#1e293b', color: '#94a3b8', padding: '0.2rem 0.55rem', borderRadius: '4px', border: '1px solid #334155' }}>
+                {project.network_owner}
+              </span>
+            )}
+            {project.line_littera && (
+              <span style={{ fontSize: '0.72rem', backgroundColor: '#1e293b', color: '#94a3b8', padding: '0.2rem 0.55rem', borderRadius: '4px', border: '1px solid #334155' }}>
+                Littera: {project.line_littera}
+              </span>
+            )}
+            {project.substation_numbers && (
+              <span style={{ fontSize: '0.72rem', backgroundColor: '#1e293b', color: '#94a3b8', padding: '0.2rem 0.55rem', borderRadius: '4px', border: '1px solid #334155' }}>
+                Stationer: {project.substation_numbers}
+              </span>
+            )}
+            {project.lead_preparer && (
+              <span style={{ fontSize: '0.72rem', backgroundColor: '#1e293b', color: '#94a3b8', padding: '0.2rem 0.55rem', borderRadius: '4px', border: '1px solid #334155' }}>
+                Beredare: {project.lead_preparer}
+              </span>
+            )}
+            {project.client_pm && (
+              <span style={{ fontSize: '0.72rem', backgroundColor: '#1e293b', color: '#94a3b8', padding: '0.2rem 0.55rem', borderRadius: '4px', border: '1px solid #334155' }}>
+                Projektledare: {project.client_pm}
+              </span>
+            )}
+          </div>
         </div>
         
-        {/* Logotypshantering */}
-        <div className="card" style={{ padding: '0.8rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          {project.logo_path ? (
-            <img 
-              src={`${API_BASE_URL}${project.logo_path}`} 
-              alt="Projektlogotyp" 
-              style={{ maxHeight: '40px', maxWidth: '100px', borderRadius: '4px' }}
-            />
-          ) : (
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Ingen logotyp</div>
-          )}
-          
-          <form onSubmit={handleLogoUpload} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <input 
-              type="file" 
-              accept="image/*" 
-              onChange={(e) => setLogoFile(e.target.files[0])} 
-              style={{ display: 'none' }} 
-              id="logo-file-input"
-            />
-            <label htmlFor="logo-file-input" className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}>
-              Välj Logga
-            </label>
-            {logoFile && (
-              <button type="submit" className="btn btn-primary btn-sm" style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}>
-                Spara
-              </button>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button 
+            className="btn btn-secondary btn-sm"
+            onClick={handleExportVattenfall}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', borderColor: 'rgba(95, 200, 145, 0.4)', color: 'var(--color-accent)' }}
+            title="Exportera till Vattenfalls officiella Excel-ark"
+          >
+            <Download size={14} /> Exportera Vattenfall-mall (.xlsx)
+          </button>
+
+          <button 
+            className="btn btn-secondary btn-sm"
+            onClick={() => setShowVattenfallModal(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+            title="Komplettera projektet från Vattenfall Excel/CSV"
+          >
+            <Upload size={14} /> Komplettera från fil
+          </button>
+
+          {/* Logotypshantering */}
+          <div className="card" style={{ padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            {project.logo_path ? (
+              <img 
+                src={`${API_BASE_URL}${project.logo_path}`} 
+                alt="Projektlogotyp" 
+                style={{ maxHeight: '32px', maxWidth: '80px', borderRadius: '4px' }}
+              />
+            ) : (
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Ingen logotyp</div>
             )}
-          </form>
+            
+            <form onSubmit={handleLogoUpload} style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+              <input 
+                type="file" 
+                accept="image/*" 
+                onChange={(e) => setLogoFile(e.target.files[0])} 
+                style={{ display: 'none' }} 
+                id="logo-file-input"
+              />
+              <label htmlFor="logo-file-input" className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', fontSize: '0.7rem', padding: '0.3rem 0.6rem' }}>
+                Välj Logga
+              </label>
+              {logoFile && (
+                <button type="submit" className="btn btn-primary btn-sm" style={{ fontSize: '0.7rem', padding: '0.3rem 0.6rem' }}>
+                  Spara
+                </button>
+              )}
+            </form>
+          </div>
         </div>
       </div>
 
@@ -786,6 +879,9 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
               {landowners.filter(o => o.status === 'signed').length} redo
             </span>
           )}
+        </button>
+        <button className={`tab-header ${activeTab === 'permits' ? 'active' : ''}`} onClick={() => setActiveTab('permits')} style={{ background: 'none', border: 'none', fontSize: '0.95rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+          <Shield size={15} /> Tillstånd & Sidoavtal ({projectPermits.length})
         </button>
         <button className={`tab-header ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')} style={{ background: 'none', border: 'none', fontSize: '0.95rem' }}>
           Inställningar
@@ -1759,6 +1855,143 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
         );
       })()}
 
+      {/* TAB: TILLSTÅND & SIDOAVTAL */}
+      {activeTab === 'permits' && (
+        <div>
+          {/* Header & Metrics */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div className="card" style={{ padding: '1rem' }}>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ABEL07 Vägavtal</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'white', marginTop: '0.25rem' }}>
+                {projectPermits.filter(p => p.permit_type === 'abel07').length} st
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-accent)', marginTop: '0.25rem' }}>
+                {projectPermits.filter(p => p.permit_type === 'abel07' && (p.status === 'approved' || p.approved_date)).length} godkända
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: '1rem' }}>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Korsningsavtal</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'white', marginTop: '0.25rem' }}>
+                {projectPermits.filter(p => p.permit_type === 'crossing').length} st
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#60a5fa', marginTop: '0.25rem' }}>
+                Trafikverket / Järnväg
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: '1rem' }}>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Bygglov</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'white', marginTop: '0.25rem' }}>
+                {projectPermits.filter(p => p.permit_type === 'building_permit').length} st
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#fbbf24', marginTop: '0.25rem' }}>
+                Kommunala bygglov
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: '1rem' }}>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Länsstyrelsen Samråd</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'white', marginTop: '0.25rem' }}>
+                {projectPermits.filter(p => p.permit_type === 'lst_samrad').length} st
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#a78bfa', marginTop: '0.25rem' }}>
+                12:6 MB Naturvård
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: '1rem' }}>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Strand- & Vattenskydd</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'white', marginTop: '0.25rem' }}>
+                {projectPermits.filter(p => ['beach_protection', 'water_activity'].includes(p.permit_type)).length} st
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#38bdf8', marginTop: '0.25rem' }}>
+                Dispens & Vattenanmälan
+              </div>
+            </div>
+          </div>
+
+          {/* Tabell över tillstånd */}
+          <div className="table-container">
+            <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h2 style={{ fontSize: '1rem', color: 'white', margin: 0, fontFamily: 'var(--font-title)' }}>
+                  Registrerade Tillstånd & Sidoavtal ({projectPermits.length})
+                </h2>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Automatisk spårning från Vattenfalls markägarförteckningskolumner (Kol 52–63)
+                </span>
+              </div>
+              <button 
+                className="btn btn-secondary btn-sm"
+                onClick={() => setShowVattenfallModal(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem' }}
+              >
+                <Upload size={14} /> Importera / Komplettera
+              </button>
+            </div>
+
+            {projectPermits.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '3.5rem 2rem', color: 'var(--text-secondary)' }}>
+                <Shield size={36} style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }} />
+                <p style={{ margin: 0, fontSize: '0.9rem', color: 'white', fontWeight: '600' }}>
+                  Inga sidoavtal eller tillstånd registrerade ännu.
+                </p>
+                <p style={{ margin: '0.5rem 0 1.25rem 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  När du importerar en Vattenfall-mall med ifyllda datum för ABEL07, Korsningsavtal, Bygglov eller LST-samråd dyker de automatiskt upp här.
+                </p>
+                <button className="btn btn-primary btn-sm" onClick={() => setShowVattenfallModal(true)}>
+                  Läs in Vattenfall-mall
+                </button>
+              </div>
+            ) : (
+              <table className="table" style={{ fontSize: '0.82rem' }}>
+                <thead>
+                  <tr>
+                    <th>Typ & Ärende</th>
+                    <th>Berörd Fastighet</th>
+                    <th>Utskickat Datum</th>
+                    <th>Godkänt / Beslut</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {projectPermits.map((perm) => {
+                    const isApproved = perm.status === 'approved' || Boolean(perm.approved_date);
+                    return (
+                      <tr key={perm.id}>
+                        <td style={{ fontWeight: '600', color: 'white' }}>
+                          <div>{perm.title || perm.permit_type}</div>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Kod: {perm.permit_type}</span>
+                        </td>
+                        <td>
+                          <span style={{ color: 'white' }}>{perm.property_designation || 'Hela projektet'}</span>
+                        </td>
+                        <td style={{ fontFamily: 'monospace', color: perm.sent_date ? 'white' : 'var(--text-muted)' }}>
+                          {perm.sent_date || '–'}
+                        </td>
+                        <td style={{ fontFamily: 'monospace', color: perm.approved_date ? 'var(--color-accent)' : 'var(--text-muted)' }}>
+                          {perm.approved_date || '–'}
+                        </td>
+                        <td>
+                          {isApproved ? (
+                            <span className="badge badge-signed" style={{ fontSize: '0.7rem' }}>✓ Godkänt / OK</span>
+                          ) : perm.sent_date ? (
+                            <span className="badge badge-sent" style={{ fontSize: '0.7rem' }}>Utskickat</span>
+                          ) : (
+                            <span className="badge badge-draft" style={{ fontSize: '0.7rem' }}>Under beredning</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* TAB 5: INSTÄLLNINGAR */}
       {activeTab === 'settings' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
@@ -2053,6 +2286,18 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
           </div>
         </div>
       )}
+
+      {/* Vattenfall Import / Update Modal */}
+      <VattenfallImportModal
+        isOpen={showVattenfallModal}
+        onClose={() => setShowVattenfallModal(false)}
+        token={token}
+        targetProjectId={projectId}
+        onSuccess={() => {
+          fetchProjectData();
+          showToast('Projektdata uppdaterad från Vattenfall-mall!', 'success');
+        }}
+      />
     </div>
   );
 }

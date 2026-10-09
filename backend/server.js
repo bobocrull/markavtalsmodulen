@@ -13,6 +13,7 @@ const rateLimit = require('express-rate-limit');
 const db = require('./db');
 const { lookupPerson } = require('./services/roaringService');
 const { syncToKleer, generateKleerCsv, generateSie4 } = require('./services/kleerService');
+const { parseVattenfallFile, generateVattenfallSpreadsheet } = require('./services/vattenfallImportService');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -552,6 +553,349 @@ app.delete('/api/projects/:id/collaborators/:userId', authenticateToken, (req, r
   });
 });
 
+// Uppdatera projektmetadata
+app.put('/api/projects/:id', authenticateToken, (req, res) => {
+  const {
+    name,
+    project_type,
+    status,
+    network_owner,
+    nis_number,
+    line_littera,
+    substation_numbers,
+    municipality,
+    client_pm,
+    lead_preparer,
+    center_latitude,
+    center_longitude,
+    zoom_level
+  } = req.body;
+
+  const sql = `
+    UPDATE projects
+    SET name = COALESCE(?, name),
+        project_type = COALESCE(?, project_type),
+        status = COALESCE(?, status),
+        network_owner = COALESCE(?, network_owner),
+        nis_number = COALESCE(?, nis_number),
+        line_littera = COALESCE(?, line_littera),
+        substation_numbers = COALESCE(?, substation_numbers),
+        municipality = COALESCE(?, municipality),
+        client_pm = COALESCE(?, client_pm),
+        lead_preparer = COALESCE(?, lead_preparer),
+        center_latitude = COALESCE(?, center_latitude),
+        center_longitude = COALESCE(?, center_longitude),
+        zoom_level = COALESCE(?, zoom_level)
+    WHERE id = ?
+  `;
+
+  db.run(sql, [
+    name,
+    project_type,
+    status,
+    network_owner,
+    nis_number,
+    line_littera,
+    substation_numbers,
+    municipality,
+    client_pm,
+    lead_preparer,
+    center_latitude,
+    center_longitude,
+    zoom_level,
+    req.params.id
+  ], function(err) {
+    if (err) return res.status(500).json({ error: 'Kunde inte uppdatera projektet.' });
+    res.json({ message: 'Projektet uppdaterades framgångsrikt.' });
+  });
+});
+
+// ----------------------------------------------------
+// VATTENFALL EXCEL / CSV IMPORT & EXPORT
+// ----------------------------------------------------
+
+// Förhandsgranska Vattenfall-import (filuppladdning)
+app.post('/api/projects/preview-vattenfall-import', authenticateToken, upload.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'Ingen fil skickades med anropet.' });
+  }
+
+  try {
+    const buffer = fs.readFileSync(req.file.path);
+    const parsedData = parseVattenfallFile(buffer, req.file.originalname);
+
+    // Städa bort tillfällig fil
+    try { fs.unlinkSync(req.file.path); } catch (e) {}
+
+    res.json({
+      success: true,
+      filename: req.file.originalname,
+      metadata: parsedData.metadata,
+      summary: parsedData.summary,
+      properties: parsedData.properties,
+      landowners: parsedData.landowners,
+      warnings: parsedData.warnings
+    });
+  } catch (err) {
+    try { fs.unlinkSync(req.file.path); } catch (e) {}
+    console.error('Fel vid tolkning av Vattenfall-fil:', err);
+    res.status(400).json({ error: err.message || 'Kunde inte läsa eller tolka filen.' });
+  }
+});
+
+// Importera Vattenfall-projekt och skapa i databasen
+app.post('/api/projects/import-vattenfall', authenticateToken, async (req, res) => {
+  const { metadata, landowners } = req.body;
+  if (!metadata || !metadata.name) {
+    return res.status(400).json({ error: 'Projektmetadata och projektnamn saknas.' });
+  }
+
+  const projectSql = `
+    INSERT INTO projects (
+      name, project_type, status, network_owner, nis_number, line_littera,
+      substation_numbers, municipality, client_pm, lead_preparer,
+      center_latitude, center_longitude, zoom_level
+    ) VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, 56.25, 12.6, 12)
+  `;
+
+  db.run(projectSql, [
+    metadata.name,
+    metadata.project_type || 'Elnät',
+    metadata.network_owner || 'Vattenfall Eldistribution AB',
+    metadata.nis_number || '',
+    metadata.line_littera || '',
+    metadata.substation_numbers || '',
+    metadata.municipality || '',
+    metadata.client_pm || '',
+    metadata.lead_preparer || ''
+  ], function(err) {
+    if (err) {
+      console.error('Kunde inte skapa projekt vid import:', err);
+      return res.status(500).json({ error: 'Kunde inte spara projekt i databasen.' });
+    }
+
+    const projectId = this.lastID;
+    db.run("INSERT INTO project_assignments (project_id, user_id) VALUES (?, ?)", [projectId, req.user.id]);
+
+    if (!landowners || !Array.isArray(landowners) || landowners.length === 0) {
+      return res.status(201).json({
+        success: true,
+        projectId,
+        message: 'Projekt skapat utan markägarrader (tom mall).',
+        importedCount: 0
+      });
+    }
+
+    let processed = 0;
+    let errors = [];
+
+    landowners.forEach((lo) => {
+      const loSql = `
+        INSERT INTO landowners (
+          project_id, name, personal_number, address, email, phone, bank_account,
+          share, lm_case_number, notes, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      db.run(loSql, [
+        projectId,
+        lo.name || 'Okänd markägare',
+        lo.personal_number || '',
+        lo.address || '',
+        lo.email || '',
+        lo.phone || '',
+        lo.bank_account || '',
+        lo.share || '1/1',
+        lo.lm_case_number || '',
+        lo.notes || '',
+        lo.status || 'draft'
+      ], function(loErr) {
+        if (loErr) {
+          errors.push(loErr.message);
+          processed++;
+          if (processed === landowners.length) {
+            return res.status(201).json({ success: true, projectId, importedCount: landowners.length - errors.length, errors });
+          }
+          return;
+        }
+
+        const landownerId = this.lastID;
+
+        // Värdering & EBR
+        const calcJson = JSON.stringify(lo.intrusion || {});
+        const valText = `Importerad från Vattenfall-mall (${metadata.nis_number || ''}). EBR-intrång: ${lo.intrusion?.cable_hsp_m || 0}m 24kV, ${lo.intrusion?.cable_lsp_m || 0}m 0.4kV, ${lo.intrusion?.substations_count || 0} nätstationer, ${lo.intrusion?.cabinets_count || 0} kabelskåp.`;
+        db.run(
+          "INSERT INTO land_valuations (landowner_id, valuation_text, compensation_sum, calculator_data) VALUES (?, ?, ?, ?)",
+          [landownerId, valText, lo.compensation_sum || 0, calcJson]
+        );
+
+        // Fastighet
+        db.run(
+          "INSERT INTO properties (landowner_id, designation, municipality) VALUES (?, ?, ?)",
+          [landownerId, lo.property_designation || 'Fastighet', metadata.municipality || '']
+        );
+
+        // Sidoavtal & tillstånd
+        if (lo.permits && Array.isArray(lo.permits)) {
+          lo.permits.forEach(p => {
+            db.run(
+              "INSERT INTO project_permits (project_id, landowner_id, property_designation, permit_type, title, sent_date, approved_date, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+              [projectId, landownerId, lo.property_designation || '', p.permit_type, p.title || p.permit_type, p.sent_date || null, p.approved_date || null, p.status || 'pending']
+            );
+          });
+        }
+
+        // Standarddokument
+        const docs = [
+          { name: 'Markupplåtelseavtal (MUA)', doc_type: 'agreement', sort_order: 1 },
+          { name: 'Värderingsprotokoll', doc_type: 'valuation', sort_order: 2 },
+          { name: 'Markägarkarta', doc_type: 'map', sort_order: 3 }
+        ];
+        docs.forEach(doc => {
+          db.run(
+            "INSERT INTO documents (project_id, landowner_id, name, file_path, doc_type, sort_order, requires_shipping, target_send_date, property_designation) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)",
+            [
+              projectId,
+              landownerId,
+              doc.name,
+              `/uploads/documents/mock-${doc.doc_type}.pdf`,
+              doc.doc_type,
+              doc.sort_order,
+              new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              lo.property_designation || 'Fastighet'
+            ]
+          );
+        });
+
+        processed++;
+        if (processed === landowners.length) {
+          res.status(201).json({
+            success: true,
+            projectId,
+            importedCount: landowners.length - errors.length,
+            errors
+          });
+        }
+      });
+    });
+  });
+});
+
+// Importera ytterligare rader in i befintligt projekt
+app.post('/api/projects/:id/import-vattenfall', authenticateToken, (req, res) => {
+  const projectId = req.params.id;
+  const { landowners } = req.body;
+
+  if (!landowners || !Array.isArray(landowners) || landowners.length === 0) {
+    return res.status(400).json({ error: 'Inga markägarrader att importera.' });
+  }
+
+  let processed = 0;
+  let errors = [];
+
+  landowners.forEach((lo) => {
+    const loSql = `
+      INSERT INTO landowners (
+        project_id, name, personal_number, address, email, phone, bank_account,
+        share, lm_case_number, notes, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    db.run(loSql, [
+      projectId,
+      lo.name || 'Okänd markägare',
+      lo.personal_number || '',
+      lo.address || '',
+      lo.email || '',
+      lo.phone || '',
+      lo.bank_account || '',
+      lo.share || '1/1',
+      lo.lm_case_number || '',
+      lo.notes || '',
+      lo.status || 'draft'
+    ], function(loErr) {
+      if (loErr) {
+        errors.push(loErr.message);
+        processed++;
+        if (processed === landowners.length) {
+          return res.json({ success: true, importedCount: landowners.length - errors.length, errors });
+        }
+        return;
+      }
+
+      const landownerId = this.lastID;
+      const calcJson = JSON.stringify(lo.intrusion || {});
+      db.run(
+        "INSERT INTO land_valuations (landowner_id, valuation_text, compensation_sum, calculator_data) VALUES (?, 'Importerad från Vattenfall-mall.', ?, ?)",
+        [landownerId, lo.compensation_sum || 0, calcJson]
+      );
+
+      db.run(
+        "INSERT INTO properties (landowner_id, designation) VALUES (?, ?)",
+        [landownerId, lo.property_designation || 'Fastighet']
+      );
+
+      if (lo.permits && Array.isArray(lo.permits)) {
+        lo.permits.forEach(p => {
+          db.run(
+            "INSERT INTO project_permits (project_id, landowner_id, property_designation, permit_type, title, sent_date, approved_date, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [projectId, landownerId, lo.property_designation || '', p.permit_type, p.title || p.permit_type, p.sent_date || null, p.approved_date || null, p.status || 'pending']
+          );
+        });
+      }
+
+      processed++;
+      if (processed === landowners.length) {
+        res.json({
+          success: true,
+          importedCount: landowners.length - errors.length,
+          errors
+        });
+      }
+    });
+  });
+});
+
+// Exportera till Vattenfall Excel-mall (.xlsx)
+app.get('/api/projects/:projectId/export-vattenfall', authenticateToken, async (req, res) => {
+  const projectId = req.params.projectId;
+  try {
+    const project = await new Promise((resolve, reject) => {
+      db.get("SELECT * FROM projects WHERE id = ?", [projectId], (err, row) => err ? reject(err) : resolve(row));
+    });
+    if (!project) return res.status(404).json({ error: 'Projektet hittades inte.' });
+
+    const landowners = await new Promise((resolve, reject) => {
+      db.all("SELECT l.*, lv.calculator_data, lv.compensation_sum FROM landowners l LEFT JOIN land_valuations lv ON l.id = lv.landowner_id WHERE l.project_id = ?", [projectId], (err, rows) => err ? reject(err) : resolve(rows || []));
+    });
+
+    const properties = await new Promise((resolve, reject) => {
+      db.all("SELECT p.* FROM properties p JOIN landowners l ON p.landowner_id = l.id WHERE l.project_id = ?", [projectId], (err, rows) => err ? reject(err) : resolve(rows || []));
+    });
+
+    const permits = await new Promise((resolve, reject) => {
+      db.all("SELECT * FROM project_permits WHERE project_id = ?", [projectId], (err, rows) => err ? reject(err) : resolve(rows || []));
+    });
+
+    const xlsxBuffer = generateVattenfallSpreadsheet(project, landowners, properties, permits);
+    const safeNis = (project.nis_number || `P${project.id}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="Markagarforteckning_${safeNis}.xlsx"`);
+    res.send(xlsxBuffer);
+  } catch (err) {
+    console.error('Kunde inte exportera Vattenfall-ark:', err);
+    res.status(500).json({ error: 'Kunde inte exportera Vattenfall-ark.' });
+  }
+});
+
+// Hämta projektets alla tillstånd & sidoavtal
+app.get('/api/projects/:projectId/permits', authenticateToken, (req, res) => {
+  db.all("SELECT * FROM project_permits WHERE project_id = ? ORDER BY created_at DESC", [req.params.projectId], (err, rows) => {
+    if (err) return res.status(500).json({ error: 'Kunde inte hämta tillstånd.' });
+    res.json(rows || []);
+  });
+});
+
 // ----------------------------------------------------
 // PERSONUPPSLAGNING (SPAR / ROARING.IO)
 // ----------------------------------------------------
@@ -604,11 +948,14 @@ app.get('/api/landowners/:id', authenticateToken, (req, res) => {
     db.all("SELECT * FROM properties WHERE landowner_id = ?", [landowner.id], (err, properties) => {
       db.get("SELECT * FROM land_valuations WHERE landowner_id = ?", [landowner.id], (err, valuation) => {
         db.all("SELECT * FROM shipments WHERE landowner_id = ? ORDER BY created_at DESC", [landowner.id], (err, shipments) => {
-          res.json({
-            ...landowner,
-            properties: properties || [],
-            valuation: valuation || { valuation_text: '', compensation_sum: 0, file_path: null },
-            shipments: shipments || []
+          db.all("SELECT * FROM project_permits WHERE landowner_id = ? ORDER BY created_at DESC", [landowner.id], (err, permits) => {
+            res.json({
+              ...landowner,
+              properties: properties || [],
+              valuation: valuation || { valuation_text: '', compensation_sum: 0, file_path: null },
+              shipments: shipments || [],
+              permits: permits || []
+            });
           });
         });
       });
@@ -617,14 +964,14 @@ app.get('/api/landowners/:id', authenticateToken, (req, res) => {
 });
 
 app.post('/api/projects/:projectId/landowners', authenticateToken, validateFields, (req, res) => {
-  const { name, personal_number, address, email, phone, bank_account } = req.body;
+  const { name, personal_number, address, email, phone, bank_account, share, lm_case_number, notes } = req.body;
   if (!name) return res.status(400).json({ error: 'Namn krävs.' });
 
   const query = `
-    INSERT INTO landowners (project_id, name, personal_number, address, email, phone, bank_account, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'draft')
+    INSERT INTO landowners (project_id, name, personal_number, address, email, phone, bank_account, share, lm_case_number, notes, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')
   `;
-  db.run(query, [req.params.projectId, name, personal_number, address, email, phone, bank_account], function(err) {
+  db.run(query, [req.params.projectId, name, personal_number, address, email, phone, bank_account, share || '1/1', lm_case_number || '', notes || ''], function(err) {
     if (err) return res.status(500).json({ error: 'Kunde inte lägga till markägare.' });
     const landownerId = this.lastID;
     
@@ -636,13 +983,22 @@ app.post('/api/projects/:projectId/landowners', authenticateToken, validateField
 });
 
 app.put('/api/landowners/:id', authenticateToken, validateFields, (req, res) => {
-  const { name, personal_number, address, email, phone, bank_account, status } = req.body;
+  const { name, personal_number, address, email, phone, bank_account, share, lm_case_number, notes, status } = req.body;
   const query = `
     UPDATE landowners
-    SET name = ?, personal_number = ?, address = ?, email = ?, phone = ?, bank_account = ?, status = ?
+    SET name = COALESCE(?, name),
+        personal_number = COALESCE(?, personal_number),
+        address = COALESCE(?, address),
+        email = COALESCE(?, email),
+        phone = COALESCE(?, phone),
+        bank_account = COALESCE(?, bank_account),
+        share = COALESCE(?, share),
+        lm_case_number = COALESCE(?, lm_case_number),
+        notes = COALESCE(?, notes),
+        status = COALESCE(?, status)
     WHERE id = ?
   `;
-  db.run(query, [name, personal_number, address, email, phone, bank_account, status, req.params.id], (err) => {
+  db.run(query, [name, personal_number, address, email, phone, bank_account, share, lm_case_number, notes, status, req.params.id], (err) => {
     if (err) return res.status(500).json({ error: 'Kunde inte uppdatera markägare.' });
     res.json({ message: 'Markägare uppdaterad.' });
   });

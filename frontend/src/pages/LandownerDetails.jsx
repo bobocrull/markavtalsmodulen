@@ -1307,6 +1307,24 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
                     <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.7rem', textTransform: 'uppercase', fontFamily: 'var(--font-title)' }}>Bankkonto (Utbetalning)</span>
                     <strong style={{ color: 'white' }}>{bankAccount || 'Ej angivet'}</strong>
                   </div>
+                  {owner?.share && (
+                    <div>
+                      <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.7rem', textTransform: 'uppercase', fontFamily: 'var(--font-title)' }}>Ägarandel</span>
+                      <strong style={{ color: 'white' }}>{owner.share}</strong>
+                    </div>
+                  )}
+                  {owner?.lm_case_number && (
+                    <div>
+                      <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.7rem', textTransform: 'uppercase', fontFamily: 'var(--font-title)' }}>LM Ärendenummer</span>
+                      <strong style={{ color: 'var(--color-accent)', fontFamily: 'monospace' }}>{owner.lm_case_number}</strong>
+                    </div>
+                  )}
+                  {owner?.notes && (
+                    <div style={{ gridColumn: 'span 2', backgroundColor: '#1a222d', padding: '0.5rem 0.75rem', borderRadius: '4px', border: '1px solid #2a3441', marginTop: '0.25rem' }}>
+                      <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.68rem', textTransform: 'uppercase', fontFamily: 'var(--font-title)' }}>Anmärkning</span>
+                      <span style={{ color: 'white', fontSize: '0.8rem' }}>{owner.notes}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

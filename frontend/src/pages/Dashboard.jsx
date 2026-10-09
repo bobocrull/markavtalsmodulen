@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../config';
-import { FolderPlus, FileText, Compass, Inbox, ShieldAlert, Check, RefreshCw, Layers, ArrowRight } from 'lucide-react';
+import { FolderPlus, FileText, Compass, Inbox, ShieldAlert, Check, RefreshCw, Layers, ArrowRight, FileSpreadsheet } from 'lucide-react';
+import VattenfallImportModal from '../components/VattenfallImportModal';
 
 function Dashboard({ 
   token, 
@@ -17,6 +18,7 @@ function Dashboard({
   const [projects, setProjects] = useState([]);
   const [stats, setStats] = useState({ total_projects: 0, active_projects: 0, overdue: 0, approaching: 0, on_time: 0 });
   const [showModal, setShowModal] = useState(false);
+  const [showVattenfallModal, setShowVattenfallModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -304,6 +306,26 @@ function Dashboard({
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div 
+                  onClick={() => { setShowModal(false); setShowVattenfallModal(true); }}
+                  style={{ 
+                    padding: '1rem', borderRadius: '6px', cursor: 'pointer', 
+                    backgroundColor: 'rgba(95, 200, 145, 0.08)', 
+                    border: '1px solid var(--color-accent)',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                  }}
+                >
+                  <div>
+                    <strong style={{ fontSize: '0.9rem', color: 'var(--color-accent)', display: 'block' }}>
+                      ⚡ Importera Vattenfall Markägarförteckning (.xlsx / .csv)
+                    </strong>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      Officiell mall med NIS-nummer, EBR-intrång, ledningslittera och avtalsstatus
+                    </span>
+                  </div>
+                  <ArrowRight size={18} style={{ color: 'var(--color-accent)' }} />
+                </div>
+
+                <div 
                   onClick={() => setDataSource('excel')}
                   style={{ 
                     padding: '1rem', borderRadius: '6px', cursor: 'pointer', 
@@ -514,9 +536,18 @@ function Dashboard({
             </p>
           </div>
           
-          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-            <FolderPlus size={18} /> + Skapa Nytt Projekt
-          </button>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <button 
+              className="btn btn-secondary" 
+              style={{ borderColor: 'rgba(95, 200, 145, 0.4)', color: 'var(--color-accent)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+              onClick={() => setShowVattenfallModal(true)}
+            >
+              <FileSpreadsheet size={16} /> Importera Vattenfall-mall
+            </button>
+            <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+              <FolderPlus size={18} /> + Skapa Nytt Projekt
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -563,7 +594,19 @@ function Dashboard({
               <tbody>
                 {projects.map((project) => (
                   <tr key={project.id}>
-                    <td style={{ fontWeight: '600', color: 'white' }}>{project.name}</td>
+                    <td style={{ fontWeight: '600', color: 'white' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                        <span>{project.name}</span>
+                        {project.nis_number && (
+                          <span style={{ fontSize: '0.65rem', backgroundColor: '#1e3a2b', color: 'var(--color-accent)', padding: '0.1rem 0.4rem', borderRadius: '4px', fontFamily: 'monospace' }}>
+                            {project.nis_number}
+                          </span>
+                        )}
+                      </div>
+                      {project.network_owner && (
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{project.network_owner}</div>
+                      )}
+                    </td>
                     <td>
                       <span className="badge badge-sent" style={{ fontSize: '0.65rem', padding: '0.15rem 0.5rem', fontFamily: 'var(--font-title)' }}>
                         {getProjectTypeLabel(project.project_type)}
@@ -607,6 +650,18 @@ function Dashboard({
         </div>
 
         {renderWizardModal()}
+
+        <VattenfallImportModal
+          isOpen={showVattenfallModal}
+          onClose={() => setShowVattenfallModal(false)}
+          token={token}
+          onSuccess={(newProjectId) => {
+            fetchProjects();
+            if (newProjectId) {
+              navigateToProject(newProjectId);
+            }
+          }}
+        />
       </div>
     );
   }
@@ -622,9 +677,18 @@ function Dashboard({
           </p>
         </div>
         
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-          <FolderPlus size={18} /> + Skapa Nytt Projekt
-        </button>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <button 
+            className="btn btn-secondary" 
+            style={{ borderColor: 'rgba(95, 200, 145, 0.4)', color: 'var(--color-accent)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            onClick={() => setShowVattenfallModal(true)}
+          >
+            <FileSpreadsheet size={16} /> Importera Vattenfall-mall
+          </button>
+          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+            <FolderPlus size={18} /> + Skapa Nytt Projekt
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -726,7 +790,19 @@ function Dashboard({
                 <tbody>
                   {projects.map((project) => (
                     <tr key={project.id}>
-                      <td style={{ fontWeight: '600', color: 'white' }}>{project.name}</td>
+                      <td style={{ fontWeight: '600', color: 'white' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                          <span>{project.name}</span>
+                          {project.nis_number && (
+                            <span style={{ fontSize: '0.65rem', backgroundColor: '#1e3a2b', color: 'var(--color-accent)', padding: '0.1rem 0.4rem', borderRadius: '4px', fontFamily: 'monospace' }}>
+                              {project.nis_number}
+                            </span>
+                          )}
+                        </div>
+                        {project.network_owner && (
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{project.network_owner}</div>
+                        )}
+                      </td>
                       <td>
                         <span className="badge badge-sent" style={{ fontSize: '0.65rem', padding: '0.15rem 0.5rem', fontFamily: 'var(--font-title)' }}>
                           {getProjectTypeLabel(project.project_type)}
@@ -849,6 +925,18 @@ function Dashboard({
       </div>
 
       {renderWizardModal()}
+
+      <VattenfallImportModal
+        isOpen={showVattenfallModal}
+        onClose={() => setShowVattenfallModal(false)}
+        token={token}
+        onSuccess={(newProjectId) => {
+          fetchProjects();
+          if (newProjectId) {
+            navigateToProject(newProjectId);
+          }
+        }}
+      />
     </div>
   );
 }
