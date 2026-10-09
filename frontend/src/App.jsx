@@ -12,6 +12,7 @@ import AnthropicConfigModal from './components/AnthropicConfigModal.jsx';
 import AiVisionScanModal from './components/AiVisionScanModal.jsx';
 import { nektabLogoWhiteData } from './assets/logoData.js';
 import { SpeedInsights } from '@vercel/speed-insights/react';
+import { Analytics } from '@vercel/analytics/react';
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || '');
@@ -869,6 +870,7 @@ function App() {
       />
 
       <SpeedInsights />
+      <Analytics />
     </div>
   );
 }
