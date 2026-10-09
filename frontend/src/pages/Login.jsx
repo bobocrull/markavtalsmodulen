@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { API_BASE_URL } from '../config';
 import { KeyRound, User } from 'lucide-react';
+import nektabLogoWhite from '../assets/nektab_logo_white.png';
+import nektabLogoGreen from '../assets/nektab_logo_green.png';
 
 function Login({ setToken }) {
   const [username, setUsername] = useState('');
@@ -39,7 +41,7 @@ function Login({ setToken }) {
       {/* Vänster panel med info och bild */}
       <div className="login-info-panel">
         <div className="login-info-logo">
-          <img src="/src/assets/nektab_logo_white.png" alt="NEKTAB" />
+          <img src={nektabLogoWhite} alt="NEKTAB" />
         </div>
         
         <div className="login-info-content">
@@ -119,7 +121,7 @@ function Login({ setToken }) {
       <div className="login-form-panel">
         <div className="card login-card">
           <div style={{ textAlign: 'center', marginBottom: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-            <img src="/src/assets/nektab_logo_green.png" alt="NEKTAB" style={{ height: '32px', marginBottom: '0.5rem' }} />
+            <img src={nektabLogoGreen} alt="NEKTAB" style={{ height: '32px', marginBottom: '0.5rem' }} />
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', fontFamily: 'var(--font-title)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Markägarplattform • Logga in
             </p>
