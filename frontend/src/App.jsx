@@ -820,7 +820,9 @@ function App() {
             token={token} 
             user={user}
             landownerId={activeLandownerId} 
-            navigateToProject={() => navigateToProject(activeProjectId)}
+            navigateToProject={(projId) => navigateToProject(projId || activeProjectId)}
+            navigateToLandowner={navigateToLandowner}
+            navigateToDashboard={navigateToDashboard}
           />
         )}
         {currentView === 'templates' && (

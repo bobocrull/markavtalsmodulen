@@ -72,17 +72,20 @@ export default function GlobalSearchModal({
           o.name?.toLowerCase().includes(qLower) ||
           o.personal_number?.includes(query) ||
           o.phone?.includes(query) ||
-          o.email?.toLowerCase().includes(qLower)
+          o.email?.toLowerCase().includes(qLower) ||
+          o.properties_list?.toLowerCase().includes(qLower)
         );
 
         // Match properties if available on landowners
         allOwners.forEach(o => {
-          if (o.properties) {
+          if (o.properties && Array.isArray(o.properties)) {
             o.properties.forEach(pr => {
               if (pr.designation?.toLowerCase().includes(qLower)) {
                 matchedProps.push({ ...pr, ownerName: o.name, ownerId: o.id, projectName: o.projectName });
               }
             });
+          } else if (o.properties_list && o.properties_list.toLowerCase().includes(qLower)) {
+            matchedProps.push({ designation: o.properties_list, ownerName: o.name, ownerId: o.id, projectName: o.projectName });
           }
         });
 

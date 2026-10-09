@@ -958,7 +958,7 @@ app.get('/api/projects/:projectId/landowners', authenticateToken, (req, res) => 
 });
 
 app.get('/api/landowners/:id', authenticateToken, (req, res) => {
-  const landownerQuery = "SELECT * FROM landowners WHERE id = ?";
+  const landownerQuery = "SELECT landowners.*, projects.name AS project_name FROM landowners LEFT JOIN projects ON landowners.project_id = projects.id WHERE landowners.id = ?";
   db.get(landownerQuery, [req.params.id], (err, landowner) => {
     if (err || !landowner) return res.status(404).json({ error: 'Markägare hittades inte.' });
 

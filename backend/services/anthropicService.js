@@ -450,10 +450,11 @@ async function generatePortfolioRadar({ projects = [], stats = {}, pendingReturn
   projects.forEach((p) => {
     if (p.total_landowners > 0 && (p.signed_landowners / p.total_landowners) < 0.3) {
       urgentItems.push({
+        projectId: p.id,
         priority: 'medium',
         title: `Låg framdrift i ${p.name}`,
         description: `Endast ${p.signed_landowners} av ${p.total_landowners} avtal klara. Påminnelseomgång 1 rekommenderas.`,
-        action: `Gå till ${p.name}`
+        action: `Öppna ${p.name}`
       });
     }
   });

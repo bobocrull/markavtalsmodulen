@@ -170,6 +170,8 @@ export default function AdminRadarCard({ token, onNavigateToInbox, onNavigateToP
                 onClick={() => {
                   if (item.action.includes('Inkorg') && onNavigateToInbox) {
                     onNavigateToInbox();
+                  } else if (item.projectId && onNavigateToProject) {
+                    onNavigateToProject(item.projectId);
                   } else if (onNavigateToProject) {
                     onNavigateToProject();
                   }

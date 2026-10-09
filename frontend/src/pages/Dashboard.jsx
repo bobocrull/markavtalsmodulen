@@ -19,7 +19,20 @@ function Dashboard({
   handleGdprPurgeByName
 }) {
   const [projects, setProjects] = useState([]);
+  const [projectSearch, setProjectSearch] = useState('');
   const [stats, setStats] = useState({ total_projects: 0, active_projects: 0, overdue: 0, approaching: 0, on_time: 0 });
+
+  const filteredProjects = projects.filter(p => {
+    if (!projectSearch.trim()) return true;
+    const q = projectSearch.toLowerCase();
+    return (
+      p.name?.toLowerCase().includes(q) ||
+      p.nis_number?.toLowerCase().includes(q) ||
+      p.network_owner?.toLowerCase().includes(q) ||
+      p.municipality?.toLowerCase().includes(q) ||
+      p.project_type?.toLowerCase().includes(q)
+    );
+  });
   const [showModal, setShowModal] = useState(false);
   const [showVattenfallModal, setShowVattenfallModal] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -617,9 +630,32 @@ function Dashboard({
         )}
 
         <div className="table-container">
-          <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ fontSize: '1rem', color: 'white', margin: 0, fontFamily: 'var(--font-title)' }}>Alla Projekt</h2>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Visar {projects.length} projekt</span>
+          <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div>
+              <h2 style={{ fontSize: '1rem', color: 'white', margin: 0, fontFamily: 'var(--font-title)' }}>Alla Projekt</h2>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                {projectSearch ? `Visar ${filteredProjects.length} av ${projects.length} projekt` : `Visar ${projects.length} projekt`}
+              </span>
+            </div>
+            {projects.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <input
+                  type="text"
+                  placeholder="Sök projekt, NIS eller nätägare..."
+                  value={projectSearch}
+                  onChange={(e) => setProjectSearch(e.target.value)}
+                  style={{
+                    backgroundColor: 'var(--bg-primary)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: '6px',
+                    padding: '0.35rem 0.75rem',
+                    color: 'white',
+                    fontSize: '0.78rem',
+                    minWidth: '220px'
+                  }}
+                />
+              </div>
+            )}
           </div>
           
           {loading ? (
@@ -653,8 +689,13 @@ function Dashboard({
                 </tr>
               </thead>
               <tbody>
-                {projects.map((project) => (
-                  <tr key={project.id}>
+                {filteredProjects.map((project) => (
+                  <tr 
+                    key={project.id} 
+                    onClick={() => navigateToProject(project.id)}
+                    style={{ cursor: 'pointer' }}
+                    title={`Klicka för att öppna projektet ${project.name}`}
+                  >
                     <td style={{ fontWeight: '600', color: 'white' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                         <span>{project.name}</span>
@@ -833,7 +874,13 @@ function Dashboard({
       <AdminRadarCard 
         token={token} 
         onNavigateToInbox={() => setCurrentView('inbox')}
-        onNavigateToProject={() => setCurrentView('projects')}
+        onNavigateToProject={(projId) => {
+          if (projId) {
+            navigateToProject(projId);
+          } else {
+            setCurrentView('projects');
+          }
+        }}
       />
 
       <div className="grid" style={{ marginBottom: '2.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
@@ -892,9 +939,32 @@ function Dashboard({
         {/* VÄNSTER KOLUMN: Pågående arbeten (Projektlista som tabell) */}
         <div>
           <div className="table-container">
-            <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: '1rem', color: 'white', margin: 0, fontFamily: 'var(--font-title)' }}>Pågående arbeten (Projekt)</h2>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Visar {projects.length} projekt</span>
+            <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div>
+                <h2 style={{ fontSize: '1rem', color: 'white', margin: 0, fontFamily: 'var(--font-title)' }}>Pågående arbeten (Projekt)</h2>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  {projectSearch ? `Visar ${filteredProjects.length} av ${projects.length} projekt` : `Visar ${projects.length} projekt`}
+                </span>
+              </div>
+              {projects.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <input
+                    type="text"
+                    placeholder="Sök projekt, NIS eller nätägare..."
+                    value={projectSearch}
+                    onChange={(e) => setProjectSearch(e.target.value)}
+                    style={{
+                      backgroundColor: 'var(--bg-primary)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '6px',
+                      padding: '0.35rem 0.75rem',
+                      color: 'white',
+                      fontSize: '0.78rem',
+                      minWidth: '220px'
+                    }}
+                  />
+                </div>
+              )}
             </div>
             
             {loading ? (
@@ -928,8 +998,13 @@ function Dashboard({
                   </tr>
                 </thead>
                 <tbody>
-                  {projects.map((project) => (
-                    <tr key={project.id}>
+                  {filteredProjects.map((project) => (
+                    <tr 
+                      key={project.id}
+                      onClick={() => navigateToProject(project.id)}
+                      style={{ cursor: 'pointer' }}
+                      title={`Klicka för att öppna projektet ${project.name}`}
+                    >
                       <td style={{ fontWeight: '600', color: 'white' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                           <span>{project.name}</span>

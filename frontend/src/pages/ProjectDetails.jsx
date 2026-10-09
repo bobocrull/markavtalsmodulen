@@ -47,6 +47,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
   const [payoutFilter, setPayoutFilter] = useState('all'); // 'all', 'signed', 'paid', 'missing_bank'
   const [uploadPropertyDesignation, setUploadPropertyDesignation] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [landownerSearch, setLandownerSearch] = useState('');
   const [quickFilter, setQuickFilter] = useState('all'); // 'all', 'needs_action', 'in_progress', 'completed'
   const [isCompact, setIsCompact] = useState(false);
   const [sortField, setSortField] = useState('name');
@@ -727,6 +728,15 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
 
   const sortedAndFilteredLandowners = React.useMemo(() => {
     let list = landowners;
+    if (landownerSearch.trim()) {
+      const q = landownerSearch.toLowerCase();
+      list = list.filter(o =>
+        o.name?.toLowerCase().includes(q) ||
+        o.personal_number?.includes(q) ||
+        o.properties_list?.toLowerCase().includes(q) ||
+        o.phone?.includes(q)
+      );
+    }
     if (statusFilter) {
       list = list.filter(owner => owner.status === statusFilter);
     }
@@ -751,7 +761,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
       if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [landowners, statusFilter, quickFilter, sortField, sortDirection]);
+  }, [landowners, landownerSearch, statusFilter, quickFilter, sortField, sortDirection]);
 
   const filteredLandowners = sortedAndFilteredLandowners;
 
@@ -1266,8 +1276,44 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
               </button>
             </div>
 
-            {/* Action buttons */}
+            {/* Action buttons & Search */}
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  placeholder="Sök markägare, persnr, fastighet..."
+                  value={landownerSearch}
+                  onChange={(e) => setLandownerSearch(e.target.value)}
+                  style={{
+                    backgroundColor: 'var(--bg-primary)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: '6px',
+                    padding: '0.35rem 0.75rem',
+                    color: 'white',
+                    fontSize: '0.78rem',
+                    minWidth: '220px'
+                  }}
+                />
+                {landownerSearch && (
+                  <button
+                    onClick={() => setLandownerSearch('')}
+                    style={{
+                      position: 'absolute',
+                      right: '6px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      fontSize: '0.75rem',
+                      padding: '2px'
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
               <button
                 className="btn btn-secondary btn-sm"
                 onClick={() => setIsCompact(!isCompact)}
@@ -1408,7 +1454,19 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
                   </tr>
                 ) : (
                   filteredLandowners.map((owner) => (
-                    <tr key={owner.id} style={{ backgroundColor: selectedOwners.includes(owner.id) ? 'rgba(95, 200, 145, 0.03)' : 'transparent' }}>
+                    <tr 
+                      key={owner.id} 
+                      onClick={(e) => {
+                        if (!e.target.closest('input') && !e.target.closest('button') && !e.target.closest('a')) {
+                          navigateToLandowner(owner.id);
+                        }
+                      }}
+                      style={{ 
+                        backgroundColor: selectedOwners.includes(owner.id) ? 'rgba(95, 200, 145, 0.05)' : 'transparent',
+                        cursor: 'pointer'
+                      }}
+                      title={`Klicka för att hantera markägaren ${owner.name}`}
+                    >
                       <td>
                         <input 
                           type="checkbox" 

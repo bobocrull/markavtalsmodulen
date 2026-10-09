@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../config';
 import DocumentOrderList from '../components/DocumentOrderList';
-import { ArrowLeft, Save, Upload, FileText, Send, ShieldAlert, Plus, Trash2, ExternalLink, Edit2, Check, AlertCircle, Sparkles, Calculator, MessageSquare, Calendar, Zap, RefreshCw, FileCheck, CreditCard, Download, CheckCircle2, Camera, Printer } from 'lucide-react';
+import { ArrowLeft, Save, Upload, FileText, Send, ShieldAlert, Plus, Trash2, ExternalLink, Edit2, Check, AlertCircle, Sparkles, Calculator, MessageSquare, Calendar, Zap, RefreshCw, FileCheck, CreditCard, Download, CheckCircle2, Camera, Printer, Copy, ChevronRight } from 'lucide-react';
 import { useToast } from '../components/Toast.jsx';
 import PrintAgreementPackageModal from '../components/PrintAgreementPackageModal';
 import AiVisionScanModal from '../components/AiVisionScanModal';
 
-function LandownerDetails({ token, landownerId, navigateToProject, user }) {
+function LandownerDetails({ token, landownerId, navigateToProject, navigateToLandowner, navigateToDashboard, user }) {
   const { showToast } = useToast();
   const [owner, setOwner] = useState(null);
   const [properties, setProperties] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [shipments, setShipments] = useState([]);
+  const [projectLandowners, setProjectLandowners] = useState([]);
 
   // Flik-tillstånd (6 huvudflikar: Översikt, Värdering, Avtal, Utbetalning/Kleer, Dialog, GDPR)
   const [activeDetailTab, setActiveDetailTab] = useState('overview'); // 'overview', 'valuation', 'documents', 'payout', 'dialogue', 'gdpr'
@@ -110,6 +111,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
         headers: { Authorization: `Bearer ${token}` }
       });
       const ownersData = await res.json();
+      setProjectLandowners(Array.isArray(ownersData) ? ownersData : []);
       const propsMap = new Map();
       await Promise.all(ownersData.map(async (owner) => {
         const detailRes = await fetch(`${API_BASE_URL}/api/landowners/${owner.id}`, {
@@ -997,12 +999,73 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
 
   const nextAction = getNextActionInfo();
 
+  const currentOwnerIndex = projectLandowners.findIndex(o => o.id === parseInt(landownerId));
+  const prevLandowner = currentOwnerIndex > 0 ? projectLandowners[currentOwnerIndex - 1] : null;
+  const nextLandowner = currentOwnerIndex >= 0 && currentOwnerIndex < projectLandowners.length - 1 ? projectLandowners[currentOwnerIndex + 1] : null;
+
   return (
     <div>
-      {/* Tillbakalänk */}
-      <button className="btn btn-secondary btn-sm" onClick={navigateToProject} style={{ marginBottom: '1.5rem' }}>
-        <ArrowLeft size={16} /> Tillbaka till Projekt
-      </button>
+      {/* Breadcrumb-stig & Sekventiell Markägarbläddrare */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginBottom: '1.5rem',
+        flexWrap: 'wrap',
+        gap: '0.75rem',
+        backgroundColor: 'var(--bg-secondary)',
+        border: '1px solid var(--color-border)',
+        borderRadius: '8px',
+        padding: '0.6rem 1rem'
+      }}>
+        {/* Breadcrumb Path */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', flexWrap: 'wrap' }}>
+          <button 
+            className="btn btn-secondary btn-sm" 
+            onClick={navigateToDashboard}
+            style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
+          >
+            Dashboard
+          </button>
+          <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
+          <button 
+            className="btn btn-secondary btn-sm" 
+            onClick={() => navigateToProject(owner?.project_id)}
+            style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
+          >
+            {owner?.project_name ? owner.project_name : 'Projekt'}
+          </button>
+          <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
+          <span style={{ color: 'var(--color-accent)', fontWeight: 600 }}>{owner?.name}</span>
+        </div>
+
+        {/* Sekventiell bläddring mellan markägare */}
+        {projectLandowners.length > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <button
+              className="btn btn-secondary btn-sm"
+              disabled={!prevLandowner}
+              onClick={() => prevLandowner && navigateToLandowner && navigateToLandowner(prevLandowner.id)}
+              style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem', opacity: prevLandowner ? 1 : 0.4 }}
+              title={prevLandowner ? `Gå till föregående markägare: ${prevLandowner.name}` : 'Ingen tidigare markägare'}
+            >
+              ← Föregående
+            </button>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', minWidth: '70px', textAlign: 'center' }}>
+              {currentOwnerIndex >= 0 ? `${currentOwnerIndex + 1} av ${projectLandowners.length}` : ''}
+            </span>
+            <button
+              className="btn btn-secondary btn-sm"
+              disabled={!nextLandowner}
+              onClick={() => nextLandowner && navigateToLandowner && navigateToLandowner(nextLandowner.id)}
+              style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem', opacity: nextLandowner ? 1 : 0.4 }}
+              title={nextLandowner ? `Gå till nästa markägare: ${nextLandowner.name}` : 'Ingen nästa markägare'}
+            >
+              Nästa →
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Profiltitel */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
@@ -1316,7 +1379,22 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
                   </div>
                   <div>
                     <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.7rem', textTransform: 'uppercase', fontFamily: 'var(--font-title)' }}>Personnummer</span>
-                    <strong style={{ color: 'white' }}>{personalNumber || 'Ej angivet'}</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <strong style={{ color: 'white' }}>{personalNumber || 'Ej angivet'}</strong>
+                      {personalNumber && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(personalNumber);
+                            showToast('Personnummer kopierat till urklipp!', 'info');
+                          }}
+                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px', display: 'inline-flex', alignItems: 'center' }}
+                          title="Kopiera personnummer"
+                        >
+                          <Copy size={13} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.7rem', textTransform: 'uppercase', fontFamily: 'var(--font-title)' }}>Telefon</span>
@@ -1332,7 +1410,22 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
                   </div>
                   <div style={{ gridColumn: 'span 2' }}>
                     <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.7rem', textTransform: 'uppercase', fontFamily: 'var(--font-title)' }}>Bankkonto (Utbetalning)</span>
-                    <strong style={{ color: 'white' }}>{bankAccount || 'Ej angivet'}</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <strong style={{ color: 'white' }}>{bankAccount || 'Ej angivet'}</strong>
+                      {bankAccount && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(bankAccount);
+                            showToast('Bankkonto kopierat till urklipp!', 'info');
+                          }}
+                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px', display: 'inline-flex', alignItems: 'center' }}
+                          title="Kopiera bankkonto"
+                        >
+                          <Copy size={13} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   {owner?.share && (
                     <div>
