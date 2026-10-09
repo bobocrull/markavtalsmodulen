@@ -155,6 +155,28 @@ function Dashboard({
     }
   };
 
+  const handleResetMockData = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE_URL}/api/admin/reset-mock-data`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(data.message || 'Standardmockup inläst!', 'success');
+        fetchProjects();
+      } else {
+        showToast(data.error || 'Kunde inte läsa in mockup-data', 'error');
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Nätverksfel vid inläsning av mockup-data', 'error');
+      setLoading(false);
+    }
+  };
+
   const handleCreateProject = async () => {
     setError('');
 
@@ -605,9 +627,19 @@ function Dashboard({
           ) : projects.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
               <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>Det finns inga aktiva markprojekt.</p>
-              <button className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}>
-                Skapa ett projekt nu
-              </button>
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                <button className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}>
+                  Skapa ett projekt nu
+                </button>
+                <button 
+                  className="btn btn-secondary btn-sm" 
+                  onClick={handleResetMockData}
+                  style={{ borderColor: 'rgba(95, 200, 145, 0.4)', color: 'var(--color-accent)' }}
+                >
+                  <RefreshCw size={13} style={{ marginRight: '0.4rem', verticalAlign: 'middle' }} />
+                  Ladda in standardmockup (4 projekt, 14 markägare)
+                </button>
+              </div>
             </div>
           ) : (
             <table className="table">
@@ -870,9 +902,19 @@ function Dashboard({
             ) : projects.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
                 <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>Det finns inga aktiva markprojekt.</p>
-                <button className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}>
-                  Skapa ett projekt nu
-                </button>
+                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}>
+                    Skapa ett projekt nu
+                  </button>
+                  <button 
+                    className="btn btn-secondary btn-sm" 
+                    onClick={handleResetMockData}
+                    style={{ borderColor: 'rgba(95, 200, 145, 0.4)', color: 'var(--color-accent)' }}
+                  >
+                    <RefreshCw size={13} style={{ marginRight: '0.4rem', verticalAlign: 'middle' }} />
+                    Ladda in standardmockup (4 projekt, 14 markägare)
+                  </button>
+                </div>
               </div>
             ) : (
               <table className="table">

@@ -1,6 +1,7 @@
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
+const { seedMockData } = require('./seedData');
 
 const databaseUrl = process.env.DATABASE_URL;
 const isPostgres = !!databaseUrl;
@@ -375,6 +376,19 @@ function initializeDatabase() {
         seedUsers();
       } else {
         console.log("Databasen är redan populerad med användare.");
+      }
+    });
+
+    // Lägg till standardprojekt och markägare om projects-tabellen är tom (t.ex. på Supabase / PostgreSQL)
+    db.get("SELECT COUNT(*) as count FROM projects", (err, row) => {
+      if (err) {
+        console.error("Kunde inte kontrollera projects-tabellen:", err.message);
+        return;
+      }
+      if (row && (row.count == 0 || parseInt(row.count) === 0)) {
+        seedMockData(db);
+      } else {
+        console.log("Databasen är redan populerad med projekt och markägare.");
       }
     });
   });

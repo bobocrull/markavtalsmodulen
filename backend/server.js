@@ -1929,6 +1929,18 @@ app.post('/api/landowners/:id/kleer/sync', authenticateToken, async (req, res) =
 // ANTHROPIC AI & PROJEKTADMINISTRATÖRS-APIS
 // ----------------------------------------------------
 
+// Återställ / Ladda in standardmockup-data om data saknas
+app.post('/api/admin/reset-mock-data', authenticateToken, (req, res) => {
+  const { seedMockData } = require('./seedData');
+  try {
+    seedMockData(db);
+    res.json({ success: true, message: 'Standardmockup-data har laddats in med 4 projekt och 14 markägare!' });
+  } catch (err) {
+    console.error('Fel vid återställning av mockup-data:', err);
+    res.status(500).json({ error: 'Kunde inte ladda in mockup-data.' });
+  }
+});
+
 // Status för Anthropic API-nyckel
 app.get('/api/admin/anthropic/status', authenticateToken, (req, res) => {
   res.json({
