@@ -37,11 +37,19 @@ if (isPostgres) {
   }
 }
 
-// Helper to translate query placeholders and append RETURNING id on INSERT
+// Helper to translate query placeholders, aggregate functions and append RETURNING id on INSERT
 function convertSql(sql) {
   let pgSql = sql;
   let index = 1;
   pgSql = pgSql.replace(/\?/g, () => `$${index++}`);
+
+  // Translate SQLite GROUP_CONCAT to PostgreSQL STRING_AGG
+  pgSql = pgSql.replace(/GROUP_CONCAT\s*\(\s*([^,\)]+)\s*,\s*([^)]+)\s*\)/gi, (match, col, sep) => {
+    return `STRING_AGG(${col.trim()}::text, ${sep.trim()})`;
+  });
+  pgSql = pgSql.replace(/GROUP_CONCAT\s*\(\s*([^)]+)\s*\)/gi, (match, col) => {
+    return `STRING_AGG(${col.trim()}::text, ',')`;
+  });
 
   const trimmed = pgSql.trim().toUpperCase();
   if (trimmed.startsWith('INSERT') && !trimmed.includes('RETURNING')) {
