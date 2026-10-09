@@ -291,7 +291,10 @@ function initializeDatabase() {
       "ALTER TABLE landowners ADD COLUMN share TEXT",
       "ALTER TABLE landowners ADD COLUMN lm_case_number TEXT",
       "ALTER TABLE landowners ADD COLUMN notes TEXT",
-      "ALTER TABLE land_valuations ADD COLUMN calculator_data TEXT"
+      "ALTER TABLE land_valuations ADD COLUMN calculator_data TEXT",
+      "ALTER TABLE projects ADD COLUMN assigned_user_id INTEGER",
+      "ALTER TABLE users ADD COLUMN full_name TEXT",
+      "ALTER TABLE users ADD COLUMN email TEXT"
     ];
 
     alterQueries.forEach((query) => {

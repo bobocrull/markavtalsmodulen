@@ -482,9 +482,18 @@ function App() {
 
         <div className="sidebar-footer">
           <div className="sidebar-user">
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span className="username">{user.username}</span>
-              <span className="role">{user.role}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '140px' }}>
+              <span className="username" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {user.full_name || user.username}
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.15rem' }}>
+                <span 
+                  className={`status-pill ${user.role === 'admin' ? 'status-pill-signed' : 'status-pill-processing'}`} 
+                  style={{ fontSize: '0.62rem', padding: '0.1rem 0.4rem', textTransform: 'uppercase' }}
+                >
+                  {user.role === 'admin' ? 'PROJEKTADMIN' : 'BEREDARE'}
+                </span>
+              </div>
             </div>
             <button className="btn btn-danger btn-icon-only btn-sm" title="Logga ut" onClick={handleLogout} style={{ clipPath: 'none' }}>
               <LogOut size={14} />
@@ -498,6 +507,7 @@ function App() {
         {currentView === 'dashboard' && (
           <Dashboard 
             token={token} 
+            user={user}
             navigateToProject={navigateToProject} 
             setCurrentView={setCurrentView}
             matchedReturns={matchedReturns}
@@ -511,6 +521,7 @@ function App() {
         {currentView === 'projects' && (
           <Dashboard 
             token={token} 
+            user={user}
             navigateToProject={navigateToProject} 
             setCurrentView={setCurrentView}
             showOnlyProjects={true}
@@ -811,6 +822,7 @@ function App() {
         {currentView === 'project' && (
           <ProjectDetails 
             token={token} 
+            user={user}
             projectId={activeProjectId} 
             navigateToLandowner={navigateToLandowner}
             navigateToDashboard={navigateToDashboard}

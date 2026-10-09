@@ -205,16 +205,96 @@ function authenticateToken(req, res, next) {
   });
 }
 
+// Rollkontroll Middleware (RBAC)
+function requireAdmin(req, res, next) {
+  if (req.user && (req.user.role === 'admin' || req.user.role === 'project_admin')) {
+    next();
+  } else {
+    res.status(403).json({ error: 'Behörighet saknas. Åtgärden kräver rollen Projektadministratör.' });
+  }
+}
+
 // ----------------------------------------------------
 // AUTH API
 // ----------------------------------------------------
+app.post('/api/auth/register', (req, res) => {
+  const { username, password, full_name, email, role } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Användarnamn och lösenord krävs.' });
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Lösenordet måste bestå av minst 6 tecken.' });
+  }
+
+  // Validera roll: 'admin' (projektadministratör) eller 'beredare' (beredare med läsbehörighet)
+  const validRole = (role === 'admin' || role === 'project_admin') ? 'admin' : 'beredare';
+  const cleanUsername = username.trim().toLowerCase();
+  const cleanFullName = full_name ? full_name.trim() : cleanUsername;
+  const cleanEmail = email ? email.trim() : '';
+
+  db.get("SELECT id FROM users WHERE username = ?", [cleanUsername], (err, existing) => {
+    if (err) return res.status(500).json({ error: 'Databasfel vid kontroll av användare.' });
+    if (existing) {
+      return res.status(400).json({ error: 'Användarnamnet är redan upptaget.' });
+    }
+
+    const salt = bcrypt.genSaltSync(10);
+    const password_hash = bcrypt.hashSync(password, salt);
+
+    db.run(
+      "INSERT INTO users (username, password_hash, role, full_name, email) VALUES (?, ?, ?, ?, ?)",
+      [cleanUsername, password_hash, validRole, cleanFullName, cleanEmail],
+      function (err) {
+        if (err) {
+          // Fallback if full_name / email columns are in flight
+          db.run(
+            "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+            [cleanUsername, password_hash, validRole],
+            function (err2) {
+              if (err2) return res.status(500).json({ error: 'Kunde inte registrera användare.' });
+              const newId = this.lastID;
+              const token = jwt.sign(
+                { id: newId, username: cleanUsername, role: validRole, full_name: cleanFullName },
+                JWT_SECRET,
+                { expiresIn: '8h' }
+              );
+              return res.status(201).json({
+                message: 'Välkommen till din personliga portal!',
+                token,
+                user: { id: newId, username: cleanUsername, role: validRole, full_name: cleanFullName, email: cleanEmail }
+              });
+            }
+          );
+          return;
+        }
+
+        const newId = this.lastID;
+        const token = jwt.sign(
+          { id: newId, username: cleanUsername, role: validRole, full_name: cleanFullName },
+          JWT_SECRET,
+          { expiresIn: '8h' }
+        );
+
+        res.status(201).json({
+          message: 'Välkommen till din personliga portal!',
+          token,
+          user: { id: newId, username: cleanUsername, role: validRole, full_name: cleanFullName, email: cleanEmail }
+        });
+      }
+    );
+  });
+});
+
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Ange användarnamn och lösenord.' });
   }
 
-  db.get("SELECT * FROM users WHERE username = ?", [username], (err, user) => {
+  const cleanUsername = username.trim().toLowerCase();
+
+  db.get("SELECT * FROM users WHERE username = ?", [cleanUsername], (err, user) => {
     if (err || !user) {
       return res.status(401).json({ error: 'Fel användarnamn eller lösenord.' });
     }
@@ -225,27 +305,43 @@ app.post('/api/auth/login', (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role },
+      { id: user.id, username: user.username, role: user.role, full_name: user.full_name || user.username },
       JWT_SECRET,
       { expiresIn: '8h' }
     );
 
     res.json({
       token,
-      user: { id: user.id, username: user.username, role: user.role }
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        full_name: user.full_name || user.username,
+        email: user.email || ''
+      }
     });
   });
 });
 
 app.get('/api/auth/me', authenticateToken, (req, res) => {
-  res.json({ user: req.user });
+  db.get("SELECT id, username, role, full_name, email FROM users WHERE id = ?", [req.user.id], (err, user) => {
+    if (!err && user) {
+      res.json({ user: { ...user, full_name: user.full_name || user.username } });
+    } else {
+      res.json({ user: req.user });
+    }
+  });
 });
 
-// Hämta alla användare (för tilldelning)
+// Hämta alla användare (för tilldelning och delegering)
 app.get('/api/users', authenticateToken, (req, res) => {
-  db.all("SELECT id, username, role FROM users", [], (err, rows) => {
+  db.all("SELECT id, username, role, full_name, email FROM users ORDER BY username ASC", [], (err, rows) => {
     if (err) return res.status(500).json({ error: 'Kunde inte hämta användare.' });
-    res.json(rows);
+    const formatted = (rows || []).map(u => ({
+      ...u,
+      full_name: u.full_name || u.username
+    }));
+    res.json(formatted);
   });
 });
 
@@ -320,6 +416,7 @@ app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
 app.get('/api/projects', authenticateToken, (req, res) => {
   const query = `
     SELECT p.*,
+      (SELECT COALESCE(full_name, username) FROM users WHERE id = p.assigned_user_id) as assigned_user_name,
       (SELECT COUNT(*) FROM landowners WHERE project_id = p.id) as total_landowners,
       (SELECT COUNT(*) FROM landowners WHERE project_id = p.id AND status IN ('signed', 'paid', 'easement', 'delivered', 'archived')) as signed_landowners,
       (SELECT COUNT(*) FROM landowners WHERE project_id = p.id AND status = 'draft') as draft_count,
@@ -505,29 +602,80 @@ async function ensureMockPdfFiles() {
   }
 }
 
-app.post('/api/projects', authenticateToken, (req, res) => {
+app.post('/api/projects', authenticateToken, requireAdmin, (req, res) => {
   const { name, project_type, center_latitude, center_longitude, zoom_level, seed } = req.body;
   if (!name || !project_type) {
     return res.status(400).json({ error: 'Projektnamn och typ krävs.' });
   }
 
+  const defaultPreparer = req.user.full_name || req.user.username;
   const query = `
-    INSERT INTO projects (name, project_type, status, center_latitude, center_longitude, zoom_level)
-    VALUES (?, ?, 'active', ?, ?, ?)
+    INSERT INTO projects (name, project_type, status, center_latitude, center_longitude, zoom_level, assigned_user_id, lead_preparer)
+    VALUES (?, ?, 'active', ?, ?, ?, ?, ?)
   `;
-  db.run(query, [name, project_type, center_latitude || 59.3293, center_longitude || 18.0686, zoom_level || 12], function(err) {
+  db.run(query, [name, project_type, center_latitude || 59.3293, center_longitude || 18.0686, zoom_level || 12, req.user.id, defaultPreparer], function(err) {
     if (err) return res.status(500).json({ error: 'Kunde inte skapa projektet.' });
     
     const projectId = this.lastID;
     db.run("INSERT INTO project_assignments (project_id, user_id) VALUES (?, ?)", [projectId, req.user.id], () => {
       if (seed) {
         seedProjectData(projectId, () => {
-          res.status(201).json({ id: projectId, name, project_type, seeded: true });
+          res.status(201).json({ id: projectId, name, project_type, seeded: true, assigned_user_id: req.user.id, lead_preparer: defaultPreparer });
         });
       } else {
-        res.status(201).json({ id: projectId, name, project_type, seeded: false });
+        res.status(201).json({ id: projectId, name, project_type, seeded: false, assigned_user_id: req.user.id, lead_preparer: defaultPreparer });
       }
     });
+  });
+});
+
+// Delegera projekt till en annan administratör eller beredare
+app.put('/api/projects/:id/delegate', authenticateToken, requireAdmin, (req, res) => {
+  const projectId = req.params.id;
+  const targetUserId = req.body.assigned_user_id || req.body.user_id;
+
+  if (!targetUserId) {
+    return res.status(400).json({ error: 'Mottagande användare (assigned_user_id eller user_id) krävs.' });
+  }
+
+  db.get("SELECT id, username, full_name, role FROM users WHERE id = ?", [targetUserId], (err, targetUser) => {
+    if (err || !targetUser) {
+      return res.status(404).json({ error: 'Mottagande användare hittades inte.' });
+    }
+
+    const assignedName = targetUser.full_name || targetUser.username;
+
+    db.run(
+      "UPDATE projects SET assigned_user_id = ?, lead_preparer = ? WHERE id = ?",
+      [targetUser.id, assignedName, projectId],
+      function (err) {
+        if (err) return res.status(500).json({ error: 'Kunde inte delegera projektet.' });
+
+        // Säkerställ koppling i project_assignments
+        db.run(
+          "INSERT INTO project_assignments (project_id, user_id) VALUES (?, ?)",
+          [projectId, targetUser.id],
+          () => {}
+        );
+
+        res.json({
+          success: true,
+          message: `Projektet har delegerats till ${assignedName}!`,
+          assigned_user_id: targetUser.id,
+          assigned_user_name: assignedName,
+          lead_preparer: assignedName
+        });
+      }
+    );
+  });
+});
+
+// Ta bort ett projekt (endast administratör)
+app.delete('/api/projects/:id', authenticateToken, requireAdmin, (req, res) => {
+  const projectId = req.params.id;
+  db.run("DELETE FROM projects WHERE id = ?", [projectId], function(err) {
+    if (err) return res.status(500).json({ error: 'Kunde inte radera projektet.' });
+    res.json({ message: 'Projektet raderades framgångsrikt.' });
   });
 });
 
@@ -1021,7 +1169,7 @@ app.put('/api/landowners/:id', authenticateToken, validateFields, (req, res) => 
   });
 });
 
-app.delete('/api/landowners/:id', authenticateToken, (req, res) => {
+app.delete('/api/landowners/:id', authenticateToken, requireAdmin, (req, res) => {
   db.run("DELETE FROM landowners WHERE id = ?", [req.params.id], (err) => {
     if (err) return res.status(500).json({ error: 'Kunde inte ta bort markägare.' });
     res.json({ message: 'Markägare raderad.' });

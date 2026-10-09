@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../config';
-import { FolderPlus, FileText, Compass, Inbox, ShieldAlert, Check, RefreshCw, Layers, ArrowRight, FileSpreadsheet, Sparkles, Camera } from 'lucide-react';
+import { FolderPlus, FileText, Compass, Inbox, ShieldAlert, Check, RefreshCw, Layers, ArrowRight, FileSpreadsheet, Sparkles, Camera, User, UserCheck, Share2, Shield } from 'lucide-react';
 import VattenfallImportModal from '../components/VattenfallImportModal';
 import AdminRadarCard from '../components/AdminRadarCard';
 import AnthropicConfigModal from '../components/AnthropicConfigModal';
@@ -8,6 +8,7 @@ import AiVisionScanModal from '../components/AiVisionScanModal';
 
 function Dashboard({ 
   token, 
+  user,
   navigateToProject,
   setCurrentView,
   showOnlyProjects = false,
@@ -20,9 +21,22 @@ function Dashboard({
 }) {
   const [projects, setProjects] = useState([]);
   const [projectSearch, setProjectSearch] = useState('');
+  const [projectScope, setProjectScope] = useState('all'); // 'all' eller 'my'
+  const [usersList, setUsersList] = useState([]);
+  const [delegateModalOpen, setDelegateModalOpen] = useState(false);
+  const [delegatingProject, setDelegatingProject] = useState(null);
+  const [selectedDelegateUserId, setSelectedDelegateUserId] = useState('');
+  const [delegatingLoading, setDelegatingLoading] = useState(false);
   const [stats, setStats] = useState({ total_projects: 0, active_projects: 0, overdue: 0, approaching: 0, on_time: 0 });
 
   const filteredProjects = projects.filter(p => {
+    if (projectScope === 'my' && user) {
+      const isMine = (p.assigned_user_id && p.assigned_user_id === user.id) ||
+        (p.assigned_user_name && p.assigned_user_name.toLowerCase().includes((user.full_name || user.username).toLowerCase())) ||
+        (p.lead_preparer && p.lead_preparer.toLowerCase().includes((user.full_name || user.username).toLowerCase())) ||
+        (p.lead_preparer && p.lead_preparer.toLowerCase().includes(user.username.toLowerCase()));
+      if (!isMine) return false;
+    }
     if (!projectSearch.trim()) return true;
     const q = projectSearch.toLowerCase();
     return (
@@ -30,7 +44,9 @@ function Dashboard({
       p.nis_number?.toLowerCase().includes(q) ||
       p.network_owner?.toLowerCase().includes(q) ||
       p.municipality?.toLowerCase().includes(q) ||
-      p.project_type?.toLowerCase().includes(q)
+      p.project_type?.toLowerCase().includes(q) ||
+      p.assigned_user_name?.toLowerCase().includes(q) ||
+      p.lead_preparer?.toLowerCase().includes(q)
     );
   });
   const [showModal, setShowModal] = useState(false);
@@ -106,7 +122,58 @@ function Dashboard({
 
   useEffect(() => {
     fetchProjects();
+    fetchUsers();
   }, []);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/users`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUsersList(data || []);
+      }
+    } catch (err) {
+      console.error('Kunde inte läsa användare:', err);
+    }
+  };
+
+  const handleOpenDelegateModal = (project) => {
+    setDelegatingProject(project);
+    setSelectedDelegateUserId(project.assigned_user_id || (usersList[0]?.id || ''));
+    setDelegateModalOpen(true);
+  };
+
+  const handleConfirmDelegation = async (e) => {
+    if (e) e.preventDefault();
+    if (!delegatingProject || !selectedDelegateUserId) return;
+
+    setDelegatingLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${delegatingProject.id}/delegate`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ user_id: parseInt(selectedDelegateUserId) })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setDelegateModalOpen(false);
+        setDelegatingProject(null);
+        fetchProjects();
+      } else {
+        alert(data.error || 'Kunde inte delegera projektet.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Nätverksfel vid delegering.');
+    } finally {
+      setDelegatingLoading(false);
+    }
+  };
 
   // Simulerar AI-extraktion vid steg 3 i wizarden
   useEffect(() => {
@@ -570,47 +637,66 @@ function Dashboard({
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
-            <h1 className="page-title">Projekt</h1>
+            <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <span>Projekt</span>
+              <span 
+                className={`status-pill ${user?.role === 'admin' ? 'status-pill-signed' : 'status-pill-processing'}`} 
+                style={{ fontSize: '0.65rem', padding: '0.15rem 0.5rem', textTransform: 'uppercase' }}
+              >
+                {user?.role === 'admin' ? 'Projektadministratör' : 'Beredare (Läsbehörighet)'}
+              </span>
+            </h1>
             <p className="page-subtitle" style={{ fontSize: '0.85rem' }}>
-              Hantera dina aktiva och planerade lednings- och markprojekt
+              {user?.role === 'admin' 
+                ? 'Hantera dina aktiva och planerade ledningsprojekt samt delegera till beredare.'
+                : 'Översikt och granskning av tilldelade ledningsprojekt och fastighetsakter.'}
             </p>
           </div>
           
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-            <button 
-              className="btn btn-secondary" 
-              style={{ 
-                borderColor: 'rgba(95, 200, 145, 0.4)', 
-                color: 'var(--color-accent)', 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '0.5rem',
-                fontFamily: 'var(--font-body)',
-                textTransform: 'none',
-                fontWeight: 600,
-                fontSize: '0.82rem',
-                letterSpacing: 'normal'
-              }}
-              onClick={() => setShowVattenfallModal(true)}
-            >
-              <FileSpreadsheet size={16} /> Importera Vattenfall-mall
-            </button>
-            <button 
-              className="btn btn-primary" 
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '0.5rem',
-                fontFamily: 'var(--font-body)',
-                textTransform: 'none',
-                fontWeight: 600,
-                fontSize: '0.82rem',
-                letterSpacing: 'normal'
-              }}
-              onClick={() => setShowModal(true)}
-            >
-              <FolderPlus size={18} /> Skapa Nytt Projekt
-            </button>
+            {user?.role === 'admin' ? (
+              <>
+                <button 
+                  className="btn btn-secondary" 
+                  style={{ 
+                    borderColor: 'rgba(95, 200, 145, 0.4)', 
+                    color: 'var(--color-accent)', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '0.5rem',
+                    fontFamily: 'var(--font-body)',
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    fontSize: '0.82rem',
+                    letterSpacing: 'normal'
+                  }}
+                  onClick={() => setShowVattenfallModal(true)}
+                >
+                  <FileSpreadsheet size={16} /> Importera Vattenfall-mall
+                </button>
+                <button 
+                  className="btn btn-primary" 
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '0.5rem',
+                    fontFamily: 'var(--font-body)',
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    fontSize: '0.82rem',
+                    letterSpacing: 'normal'
+                  }}
+                  onClick={() => setShowModal(true)}
+                >
+                  <FolderPlus size={18} /> Skapa Nytt Projekt
+                </button>
+              </>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.3)', padding: '0.35rem 0.75rem', borderRadius: '6px' }}>
+                <Shield size={14} style={{ color: '#38bdf8' }} />
+                <span style={{ fontSize: '0.78rem', color: '#38bdf8', fontWeight: 600 }}>Beredare (Granskningsläge)</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -631,11 +717,29 @@ function Dashboard({
 
         <div className="table-container">
           <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-            <div>
-              <h2 style={{ fontSize: '1rem', color: 'white', margin: 0, fontFamily: 'var(--font-title)' }}>Alla Projekt</h2>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                {projectSearch ? `Visar ${filteredProjects.length} av ${projects.length} projekt` : `Visar ${projects.length} projekt`}
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+              <h2 style={{ fontSize: '1rem', color: 'white', margin: 0, fontFamily: 'var(--font-title)' }}>Projektlista</h2>
+              <div className="filter-chip-group">
+                <button
+                  className={`filter-chip ${projectScope === 'all' ? 'active' : ''}`}
+                  onClick={() => setProjectScope('all')}
+                  style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem' }}
+                >
+                  Alla ({projects.length})
+                </button>
+                <button
+                  className={`filter-chip ${projectScope === 'my' ? 'active' : ''}`}
+                  onClick={() => setProjectScope('my')}
+                  style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem' }}
+                >
+                  Mina tilldelade ({
+                    projects.filter(p => 
+                      (p.assigned_user_id && p.assigned_user_id === user?.id) ||
+                      (p.lead_preparer && (p.lead_preparer.toLowerCase().includes((user?.full_name || user?.username || '').toLowerCase()) || p.lead_preparer.toLowerCase().includes((user?.username || '').toLowerCase())))
+                    ).length
+                  })
+                </button>
+              </div>
             </div>
             {projects.length > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -663,19 +767,21 @@ function Dashboard({
           ) : projects.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
               <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>Det finns inga aktiva markprojekt.</p>
-              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-                <button className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}>
-                  Skapa ett projekt nu
-                </button>
-                <button 
-                  className="btn btn-secondary btn-sm" 
-                  onClick={handleResetMockData}
-                  style={{ borderColor: 'rgba(95, 200, 145, 0.4)', color: 'var(--color-accent)' }}
-                >
-                  <RefreshCw size={13} style={{ marginRight: '0.4rem', verticalAlign: 'middle' }} />
-                  Ladda in standardmockup (4 projekt, 14 markägare)
-                </button>
-              </div>
+              {user?.role === 'admin' && (
+                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}>
+                    Skapa ett projekt nu
+                  </button>
+                  <button 
+                    className="btn btn-secondary btn-sm" 
+                    onClick={handleResetMockData}
+                    style={{ borderColor: 'rgba(95, 200, 145, 0.4)', color: 'var(--color-accent)' }}
+                  >
+                    <RefreshCw size={13} style={{ marginRight: '0.4rem', verticalAlign: 'middle' }} />
+                    Ladda in standardmockup (4 projekt, 14 markägare)
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <table className="table">
@@ -683,6 +789,7 @@ function Dashboard({
                 <tr>
                   <th>Projekt</th>
                   <th>Typ & Kund</th>
+                  <th>Ansvarig</th>
                   <th>Markägare</th>
                   <th>Skapat</th>
                   <th style={{ textAlign: 'right' }}>Åtgärd</th>
@@ -713,6 +820,44 @@ function Dashboard({
                       <span className="badge badge-sent" style={{ fontSize: '0.65rem', padding: '0.15rem 0.5rem', fontFamily: 'var(--font-title)' }}>
                         {getProjectTypeLabel(project.project_type)}
                       </span>
+                    </td>
+                    <td style={{ verticalAlign: 'middle' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                        <span style={{ 
+                          fontSize: '0.78rem', 
+                          color: project.assigned_user_name ? '#e2e8f0' : 'var(--text-muted)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.3rem'
+                        }}>
+                          <User size={13} style={{ color: 'var(--color-accent)' }} />
+                          {project.assigned_user_name || project.lead_preparer || 'Ej tilldelad'}
+                        </span>
+                        {user?.role === 'admin' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenDelegateModal(project);
+                            }}
+                            style={{
+                              fontSize: '0.68rem',
+                              padding: '0.15rem 0.45rem',
+                              backgroundColor: 'rgba(95, 200, 145, 0.1)',
+                              border: '1px solid rgba(95, 200, 145, 0.3)',
+                              borderRadius: '4px',
+                              color: 'var(--color-accent)',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.2rem'
+                            }}
+                            title="Delegera projekt till annan kollega"
+                          >
+                            <Share2 size={10} /> Delegera
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td style={{ verticalAlign: 'middle' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', minWidth: '120px' }}>
@@ -773,9 +918,24 @@ function Dashboard({
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 className="page-title">Översikt</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.25rem' }}>
+            <h1 className="page-title" style={{ margin: 0 }}>Översikt</h1>
+            <span style={{ 
+              fontSize: '0.7rem', 
+              padding: '0.2rem 0.55rem', 
+              borderRadius: '999px', 
+              fontWeight: 700, 
+              backgroundColor: user?.role === 'admin' ? 'rgba(95, 200, 145, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+              color: user?.role === 'admin' ? 'var(--color-accent)' : '#60a5fa',
+              border: `1px solid ${user?.role === 'admin' ? 'rgba(95, 200, 145, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em'
+            }}>
+              {user?.role === 'admin' ? 'Projektadministratör' : 'Beredare (Läsbehörighet)'}
+            </span>
+          </div>
           <p className="page-subtitle" style={{ fontSize: '0.85rem' }}>
-            Översikt över aktiva markägar-projekt. Allt som rör fastighet, markägare, avtal, utbetalning och GDPR samlat.
+            Välkommen, <strong style={{ color: 'white' }}>{user?.full_name || user?.username}</strong>! Personlig portal för beredning och markavtal.
           </p>
         </div>
         
@@ -799,59 +959,78 @@ function Dashboard({
           >
             <Camera size={16} style={{ color: 'var(--color-accent)' }} /> Claude Vision (Skanna)
           </button>
-          <button 
-            className="btn btn-secondary" 
-            style={{ 
-              borderColor: '#2d3d52', 
+
+          {user?.role === 'admin' ? (
+            <>
+              <button 
+                className="btn btn-secondary" 
+                style={{ 
+                  borderColor: '#2d3d52', 
+                  color: 'var(--text-secondary)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '0.4rem',
+                  fontFamily: 'var(--font-body)',
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  fontSize: '0.82rem',
+                  letterSpacing: 'normal'
+                }}
+                onClick={() => setShowConfigModal(true)}
+                title="Konfigurera Anthropic API-nyckel"
+              >
+                <Sparkles size={14} style={{ color: 'var(--color-accent)' }} /> AI-Inställningar
+              </button>
+              <button 
+                className="btn btn-secondary" 
+                style={{ 
+                  borderColor: 'rgba(95, 200, 145, 0.4)', 
+                  color: 'var(--color-accent)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '0.5rem',
+                  fontFamily: 'var(--font-body)',
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  fontSize: '0.82rem',
+                  letterSpacing: 'normal'
+                }}
+                onClick={() => setShowVattenfallModal(true)}
+              >
+                <FileSpreadsheet size={16} /> Importera Vattenfall-mall
+              </button>
+              <button 
+                className="btn btn-primary" 
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '0.5rem',
+                  fontFamily: 'var(--font-body)',
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  fontSize: '0.82rem',
+                  letterSpacing: 'normal'
+                }}
+                onClick={() => setShowModal(true)}
+              >
+                <FolderPlus size={18} /> Skapa Nytt Projekt
+              </button>
+            </>
+          ) : (
+            <span style={{ 
+              fontSize: '0.78rem', 
               color: 'var(--text-secondary)', 
-              display: 'flex', 
+              backgroundColor: 'var(--bg-primary)', 
+              padding: '0.45rem 0.85rem', 
+              borderRadius: '6px', 
+              border: '1px solid var(--color-border)', 
+              display: 'inline-flex', 
               alignItems: 'center', 
-              gap: '0.4rem',
-              fontFamily: 'var(--font-body)',
-              textTransform: 'none',
-              fontWeight: 600,
-              fontSize: '0.82rem',
-              letterSpacing: 'normal'
-            }}
-            onClick={() => setShowConfigModal(true)}
-            title="Konfigurera Anthropic API-nyckel"
-          >
-            <Sparkles size={14} style={{ color: 'var(--color-accent)' }} /> AI-Inställningar
-          </button>
-          <button 
-            className="btn btn-secondary" 
-            style={{ 
-              borderColor: 'rgba(95, 200, 145, 0.4)', 
-              color: 'var(--color-accent)', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '0.5rem',
-              fontFamily: 'var(--font-body)',
-              textTransform: 'none',
-              fontWeight: 600,
-              fontSize: '0.82rem',
-              letterSpacing: 'normal'
-            }}
-            onClick={() => setShowVattenfallModal(true)}
-          >
-            <FileSpreadsheet size={16} /> Importera Vattenfall-mall
-          </button>
-          <button 
-            className="btn btn-primary" 
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '0.5rem',
-              fontFamily: 'var(--font-body)',
-              textTransform: 'none',
-              fontWeight: 600,
-              fontSize: '0.82rem',
-              letterSpacing: 'normal'
-            }}
-            onClick={() => setShowModal(true)}
-          >
-            <FolderPlus size={18} /> Skapa Nytt Projekt
-          </button>
+              gap: '0.4rem' 
+            }}>
+              <Shield size={14} style={{ color: '#60a5fa' }} /> Gransknings- & läsbehörighet aktiv
+            </span>
+          )}
         </div>
       </div>
 
@@ -946,8 +1125,52 @@ function Dashboard({
                   {projectSearch ? `Visar ${filteredProjects.length} av ${projects.length} projekt` : `Visar ${projects.length} projekt`}
                 </span>
               </div>
-              {projects.length > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setProjectScope('all')}
+                    style={{
+                      backgroundColor: projectScope === 'all' ? 'var(--color-accent)' : 'var(--bg-primary)',
+                      color: projectScope === 'all' ? '#0d1520' : 'var(--text-secondary)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '5px',
+                      padding: '0.25rem 0.6rem',
+                      fontSize: '0.72rem',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Alla ({projects.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProjectScope('my')}
+                    style={{
+                      backgroundColor: projectScope === 'my' ? 'var(--color-accent)' : 'var(--bg-primary)',
+                      color: projectScope === 'my' ? '#0d1520' : 'var(--text-secondary)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '5px',
+                      padding: '0.25rem 0.6rem',
+                      fontSize: '0.72rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.25rem'
+                    }}
+                  >
+                    <UserCheck size={12} /> Mina tilldelade ({
+                      projects.filter(p => {
+                        if (!user) return false;
+                        if (p.assigned_user_id && user.id && Number(p.assigned_user_id) === Number(user.id)) return true;
+                        const myName = (user.full_name || user.username || '').toLowerCase();
+                        return p.lead_preparer && p.lead_preparer.toLowerCase().includes(myName);
+                      }).length
+                    })
+                  </button>
+                </div>
+                {projects.length > 0 && (
                   <input
                     type="text"
                     placeholder="Sök projekt, NIS eller nätägare..."
@@ -960,11 +1183,11 @@ function Dashboard({
                       padding: '0.35rem 0.75rem',
                       color: 'white',
                       fontSize: '0.78rem',
-                      minWidth: '220px'
+                      minWidth: '180px'
                     }}
                   />
-                </div>
-              )}
+                )}
+              </div>
             </div>
             
             {loading ? (
@@ -972,19 +1195,21 @@ function Dashboard({
             ) : projects.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
                 <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>Det finns inga aktiva markprojekt.</p>
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-                  <button className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}>
-                    Skapa ett projekt nu
-                  </button>
-                  <button 
-                    className="btn btn-secondary btn-sm" 
-                    onClick={handleResetMockData}
-                    style={{ borderColor: 'rgba(95, 200, 145, 0.4)', color: 'var(--color-accent)' }}
-                  >
-                    <RefreshCw size={13} style={{ marginRight: '0.4rem', verticalAlign: 'middle' }} />
-                    Ladda in standardmockup (4 projekt, 14 markägare)
-                  </button>
-                </div>
+                {user?.role === 'admin' && (
+                  <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <button className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}>
+                      Skapa ett projekt nu
+                    </button>
+                    <button 
+                      className="btn btn-secondary btn-sm" 
+                      onClick={handleResetMockData}
+                      style={{ borderColor: 'rgba(95, 200, 145, 0.4)', color: 'var(--color-accent)' }}
+                    >
+                      <RefreshCw size={13} style={{ marginRight: '0.4rem', verticalAlign: 'middle' }} />
+                      Ladda in standardmockup (4 projekt, 14 markägare)
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <table className="table">
@@ -992,6 +1217,7 @@ function Dashboard({
                   <tr>
                     <th>Projekt</th>
                     <th>Typ & Kund</th>
+                    <th>Ansvarig</th>
                     <th>Markägare</th>
                     <th>Skapat</th>
                     <th style={{ textAlign: 'right' }}>Åtgärd</th>
@@ -1022,6 +1248,44 @@ function Dashboard({
                         <span className="badge badge-sent" style={{ fontSize: '0.65rem', padding: '0.15rem 0.5rem', fontFamily: 'var(--font-title)' }}>
                           {getProjectTypeLabel(project.project_type)}
                         </span>
+                      </td>
+                      <td style={{ verticalAlign: 'middle' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                          <span style={{ 
+                            fontSize: '0.78rem', 
+                            color: project.assigned_user_name ? '#e2e8f0' : 'var(--text-muted)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.3rem'
+                          }}>
+                            <User size={13} style={{ color: 'var(--color-accent)' }} />
+                            {project.assigned_user_name || project.lead_preparer || 'Ej tilldelad'}
+                          </span>
+                          {user?.role === 'admin' && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenDelegateModal(project);
+                              }}
+                              style={{
+                                fontSize: '0.68rem',
+                                padding: '0.15rem 0.45rem',
+                                backgroundColor: 'rgba(95, 200, 145, 0.1)',
+                                border: '1px solid rgba(95, 200, 145, 0.3)',
+                                borderRadius: '4px',
+                                color: 'var(--color-accent)',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.2rem'
+                              }}
+                              title="Delegera projekt till annan kollega"
+                            >
+                              <Share2 size={10} /> Delegera
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td style={{ verticalAlign: 'middle' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', minWidth: '120px' }}>
@@ -1165,6 +1429,139 @@ function Dashboard({
         token={token}
         onSuccess={() => fetchProjects()}
       />
+
+      {/* DELEGERA PROJEKT MODAL */}
+      {delegateModalOpen && delegatingProject && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(5, 10, 15, 0.82)',
+          backdropFilter: 'blur(5px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          padding: '1rem'
+        }}>
+          <div style={{
+            backgroundColor: 'var(--bg-secondary)',
+            border: '1px solid var(--color-border)',
+            borderRadius: '10px',
+            width: '100%',
+            maxWidth: '480px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              padding: '1.25rem 1.5rem',
+              borderBottom: '1px solid var(--color-border)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <Share2 size={18} style={{ color: 'var(--color-accent)' }} />
+                <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'white', fontFamily: 'var(--font-title)' }}>
+                  Delegera projekt
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDelegateModalOpen(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  fontSize: '1.3rem',
+                  cursor: 'pointer',
+                  lineHeight: 1
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ padding: '1.5rem' }}>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.25rem' }}>
+                Tilldela och flytta ansvaret för projektet <strong style={{ color: 'white' }}>{delegatingProject.name}</strong> till en administratör eller beredare i teamet.
+              </p>
+
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', textTransform: 'uppercase', fontFamily: 'var(--font-title)', letterSpacing: '0.05em' }}>
+                  Välj ansvarig kollega:
+                </label>
+                <select
+                  value={selectedDelegateUserId}
+                  onChange={(e) => setSelectedDelegateUserId(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.65rem 0.85rem',
+                    backgroundColor: 'var(--bg-primary)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: '6px',
+                    color: 'white',
+                    fontSize: '0.85rem',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="">-- Välj kollega i teamet --</option>
+                  {usersList.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.full_name ? `${u.full_name} (${u.username})` : u.username} — {u.role === 'admin' ? 'Projektadministratör' : 'Beredare'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{
+                backgroundColor: 'rgba(95, 200, 145, 0.05)',
+                border: '1px solid rgba(95, 200, 145, 0.2)',
+                borderRadius: '6px',
+                padding: '0.75rem',
+                fontSize: '0.75rem',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.4
+              }}>
+                ℹ️ Projektet kommer omedelbart att visas i kollegans personliga portal ("Mina tilldelade projekt") och loggas i revisionshistoriken.
+              </div>
+            </div>
+
+            <div style={{
+              padding: '1rem 1.5rem',
+              borderTop: '1px solid var(--color-border)',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '0.75rem',
+              backgroundColor: 'rgba(0,0,0,0.2)'
+            }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setDelegateModalOpen(false)}
+                disabled={delegatingLoading}
+              >
+                Avbryt
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={handleConfirmDelegation}
+                disabled={!selectedDelegateUserId || delegatingLoading}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+              >
+                {delegatingLoading ? 'Sparar...' : (
+                  <>
+                    <Share2 size={13} /> Bekräfta delegering
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../config';
 import MapWidget from '../components/MapWidget';
-import { ArrowLeft, UserPlus, Trash2, FileText, Upload, Plus, Users, Layout, Shield, FileCheck, Layers, ClipboardList, Info, FileSpreadsheet, Download, ArrowUpDown, SlidersHorizontal, CheckCircle2, Zap, CreditCard, RefreshCw, Printer, Sparkles, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, UserPlus, Trash2, FileText, Upload, Plus, Users, Layout, Shield, FileCheck, Layers, ClipboardList, Info, FileSpreadsheet, Download, ArrowUpDown, SlidersHorizontal, CheckCircle2, Zap, CreditCard, RefreshCw, Printer, Sparkles, ShieldCheck, Share2, User } from 'lucide-react';
 import { useToast } from '../components/Toast.jsx';
 import VattenfallImportModal from '../components/VattenfallImportModal';
 import PrintAgreementPackageModal from '../components/PrintAgreementPackageModal';
 import AiWeeklyReportModal from '../components/AiWeeklyReportModal';
 import AiPreFlightAuditModal from '../components/AiPreFlightAuditModal';
 
-function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashboard }) {
+function ProjectDetails({ token, user, projectId, navigateToLandowner, navigateToDashboard }) {
   const { showToast } = useToast();
   const [project, setProject] = useState(null);
   const [landowners, setLandowners] = useState([]);
@@ -21,6 +21,9 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
   const [showPreFlightAuditModal, setShowPreFlightAuditModal] = useState(false);
   const [showPrintPackageModal, setShowPrintPackageModal] = useState(false);
   const [selectedLandownerForPrint, setSelectedLandownerForPrint] = useState(null);
+  const [showDelegateModal, setShowDelegateModal] = useState(false);
+  const [selectedDelegateUserId, setSelectedDelegateUserId] = useState('');
+  const [delegatingLoading, setDelegatingLoading] = useState(false);
 
   // States för formulär / modal
   const [showOwnerModal, setShowOwnerModal] = useState(false);
@@ -306,6 +309,35 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
     } catch (err) {
       console.error(err);
       showToast('Kunde inte lägga till medarbetare.', 'error');
+    }
+  };
+
+  const handleConfirmDelegation = async () => {
+    if (!selectedDelegateUserId) return;
+    setDelegatingLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${projectId}/delegate`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ assigned_user_id: parseInt(selectedDelegateUserId, 10) })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showToast(data.message || 'Projektet har delegerats!', 'success');
+        setShowDelegateModal(false);
+        fetchProjectData();
+      } else {
+        const err = await res.json();
+        showToast(err.error || 'Kunde inte delegera projektet.', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Nätverksfel vid delegering.', 'error');
+    } finally {
+      setDelegatingLoading(false);
     }
   };
 
@@ -813,11 +845,33 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
                 Stationer: {project.substation_numbers}
               </span>
             )}
-            {project.lead_preparer && (
-              <span style={{ fontSize: '0.72rem', backgroundColor: '#1e293b', color: '#94a3b8', padding: '0.2rem 0.55rem', borderRadius: '4px', border: '1px solid #334155' }}>
-                Beredare: {project.lead_preparer}
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', backgroundColor: '#1e293b', padding: '0.2rem 0.55rem', borderRadius: '4px', border: '1px solid #334155' }}>
+              <span style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                <User size={12} style={{ color: 'var(--color-accent)' }} />
+                Ansvarig: <strong style={{ color: 'white' }}>{project.assigned_user_name || project.lead_preparer || 'Ej tilldelad'}</strong>
               </span>
-            )}
+              {user?.role === 'admin' && (
+                <button
+                  type="button"
+                  onClick={() => setShowDelegateModal(true)}
+                  style={{
+                    fontSize: '0.65rem',
+                    padding: '0.1rem 0.4rem',
+                    backgroundColor: 'rgba(95, 200, 145, 0.15)',
+                    border: '1px solid rgba(95, 200, 145, 0.4)',
+                    borderRadius: '3px',
+                    color: 'var(--color-accent)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.2rem'
+                  }}
+                  title="Delegera projekt till en kollega"
+                >
+                  <Share2 size={10} /> Delegera
+                </button>
+              )}
+            </div>
             {project.client_pm && (
               <span style={{ fontSize: '0.72rem', backgroundColor: '#1e293b', color: '#94a3b8', padding: '0.2rem 0.55rem', borderRadius: '4px', border: '1px solid #334155' }}>
                 Projektledare: {project.client_pm}
@@ -2417,6 +2471,139 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
           landowner={selectedLandownerForPrint}
           project={project}
         />
+      )}
+
+      {/* DELEGERA PROJEKT MODAL */}
+      {showDelegateModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(5, 10, 15, 0.82)',
+          backdropFilter: 'blur(5px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          padding: '1rem'
+        }}>
+          <div style={{
+            backgroundColor: 'var(--bg-secondary)',
+            border: '1px solid var(--color-border)',
+            borderRadius: '10px',
+            width: '100%',
+            maxWidth: '480px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              padding: '1.25rem 1.5rem',
+              borderBottom: '1px solid var(--color-border)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <Share2 size={18} style={{ color: 'var(--color-accent)' }} />
+                <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'white', fontFamily: 'var(--font-title)' }}>
+                  Delegera projekt
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDelegateModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  fontSize: '1.3rem',
+                  cursor: 'pointer',
+                  lineHeight: 1
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ padding: '1.5rem' }}>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.25rem' }}>
+                Flytta huvudsakligt handläggaransvar för <strong style={{ color: 'white' }}>{project.name}</strong> till en kollega i teamet.
+              </p>
+
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', textTransform: 'uppercase', fontFamily: 'var(--font-title)', letterSpacing: '0.05em' }}>
+                  Välj ansvarig kollega:
+                </label>
+                <select
+                  value={selectedDelegateUserId}
+                  onChange={(e) => setSelectedDelegateUserId(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.65rem 0.85rem',
+                    backgroundColor: 'var(--bg-primary)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: '6px',
+                    color: 'white',
+                    fontSize: '0.85rem',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="">-- Välj kollega i teamet --</option>
+                  {allUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.full_name ? `${u.full_name} (${u.username})` : u.username} — {u.role === 'admin' ? 'Projektadministratör' : 'Beredare'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{
+                backgroundColor: 'rgba(95, 200, 145, 0.05)',
+                border: '1px solid rgba(95, 200, 145, 0.2)',
+                borderRadius: '6px',
+                padding: '0.75rem',
+                fontSize: '0.75rem',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.4
+              }}>
+                ℹ️ Projektet flyttas omedelbart in i kollegans personliga kö ("Mina tilldelade projekt") och loggas i revisionshistoriken.
+              </div>
+            </div>
+
+            <div style={{
+              padding: '1rem 1.5rem',
+              borderTop: '1px solid var(--color-border)',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '0.75rem',
+              backgroundColor: 'rgba(0,0,0,0.2)'
+            }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setShowDelegateModal(false)}
+                disabled={delegatingLoading}
+              >
+                Avbryt
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={handleConfirmDelegation}
+                disabled={!selectedDelegateUserId || delegatingLoading}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+              >
+                {delegatingLoading ? 'Sparar...' : (
+                  <>
+                    <Share2 size={13} /> Bekräfta delegering
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
