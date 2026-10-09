@@ -14,6 +14,8 @@ const db = require('./db');
 const { lookupPerson } = require('./services/roaringService');
 const { syncToKleer, generateKleerCsv, generateSie4 } = require('./services/kleerService');
 const { parseVattenfallFile, generateVattenfallSpreadsheet } = require('./services/vattenfallImportService');
+const anthropicService = require('./services/anthropicService');
+const { generateAgreementPackage } = require('./services/agreementPackageService');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -172,6 +174,7 @@ const storage = multer.diskStorage({
   }
 });
 const upload = multer({ storage });
+const memoryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 // ----------------------------------------------------
 // AUTH MIDDLEWARE
@@ -1919,6 +1922,289 @@ app.post('/api/landowners/:id/kleer/sync', authenticateToken, async (req, res) =
   } catch (err) {
     console.error('Kleer individual sync error:', err);
     res.status(400).json({ error: err.message || 'Kunde inte överföra utbetalning till Kleer.' });
+  }
+});
+
+// ----------------------------------------------------
+// ANTHROPIC AI & PROJEKTADMINISTRATÖRS-APIS
+// ----------------------------------------------------
+
+// Status för Anthropic API-nyckel
+app.get('/api/admin/anthropic/status', authenticateToken, (req, res) => {
+  res.json({
+    configured: anthropicService.isConfigured(),
+    model: 'claude-3-5-sonnet-20241022',
+    monthlyBudget: '100 USD'
+  });
+});
+
+// Spara / Uppdatera Anthropic API-nyckel
+app.post('/api/admin/anthropic/config', authenticateToken, (req, res) => {
+  const { api_key } = req.body;
+  if (!api_key || api_key.trim().length < 10) {
+    return res.status(400).json({ error: 'Ogiltig Anthropic API-nyckel.' });
+  }
+
+  process.env.ANTHROPIC_API_KEY = api_key.trim();
+
+  // Skriv till .env så att den sparas permanent
+  try {
+    const envPath = path.join(__dirname, '.env');
+    let envContent = '';
+    if (fs.existsSync(envPath)) {
+      envContent = fs.readFileSync(envPath, 'utf8');
+    }
+    if (envContent.includes('ANTHROPIC_API_KEY=')) {
+      envContent = envContent.replace(/ANTHROPIC_API_KEY=.*/g, `ANTHROPIC_API_KEY=${api_key.trim()}`);
+    } else {
+      envContent += `\nANTHROPIC_API_KEY=${api_key.trim()}\n`;
+    }
+    fs.writeFileSync(envPath, envContent.trim() + '\n', 'utf8');
+  } catch (err) {
+    console.warn('Kunde inte skriva ANTHROPIC_API_KEY till .env:', err.message);
+  }
+
+  res.json({
+    success: true,
+    configured: true,
+    message: 'Anthropic API-nyckel sparad och aktiverad!'
+  });
+});
+
+// 1. Claude Vision: Signatur- & Returgranskare för inskannat avtal
+app.post('/api/admin/anthropic/scan-agreement', authenticateToken, memoryUpload.single('file'), async (req, res) => {
+  const { landowner_id, project_id, save_updates } = req.body;
+
+  try {
+    let imageBuffer = null;
+    let mimeType = 'image/jpeg';
+
+    if (req.file) {
+      imageBuffer = req.file.buffer;
+      mimeType = req.file.mimetype;
+    } else if (req.body.image_base64) {
+      const b64Data = req.body.image_base64.replace(/^data:image\/\w+;base64,/, '');
+      imageBuffer = Buffer.from(b64Data, 'base64');
+      if (req.body.image_base64.includes('image/png')) mimeType = 'image/png';
+    }
+
+    if (!imageBuffer) {
+      return res.status(400).json({ error: 'Ingen bild eller skannad fil bifogad.' });
+    }
+
+    let landownerContext = {};
+    let projectContext = {};
+
+    if (landowner_id) {
+      const lo = await new Promise((resolve) => {
+        db.get("SELECT l.*, (SELECT GROUP_CONCAT(designation, ', ') FROM properties WHERE landowner_id = l.id) as properties_list FROM landowners l WHERE l.id = ?", [landowner_id], (err, row) => resolve(row));
+      });
+      if (lo) {
+        landownerContext = {
+          name: lo.name,
+          property: lo.properties_list || 'Fastighet',
+          owners: lo.name.includes(' och ') ? lo.name.split(' och ').map(s => s.trim()) : [lo.name]
+        };
+      }
+    }
+
+    if (project_id) {
+      const proj = await new Promise((resolve) => {
+        db.get("SELECT * FROM projects WHERE id = ?", [project_id], (err, row) => resolve(row));
+      });
+      if (proj) projectContext = proj;
+    }
+
+    const result = await anthropicService.analyzeScannedAgreement({
+      imageBuffer,
+      mimeType,
+      projectContext,
+      landownerContext
+    });
+
+    // Om begärt och markägare finns: uppdatera automatiskt i databasen
+    if (landowner_id && (save_updates === 'true' || save_updates === true)) {
+      if (result.bank_account_found && result.account_number) {
+        const fullAccount = `${result.clearing_number ? result.clearing_number + ' - ' : ''}${result.account_number}`;
+        db.run("UPDATE landowners SET bank_account = ? WHERE id = ?", [fullAccount, landowner_id]);
+      }
+
+      if (result.status === 'approved' && result.all_signatures_present) {
+        db.run("UPDATE landowners SET status = 'signed' WHERE id = ?", [landowner_id]);
+      }
+
+      db.run(
+        "INSERT INTO crm_communication_logs (landowner_id, user_id, log_type, summary, description) VALUES (?, ?, 'note', 'AI-Vision Avtalsgranskning', ?)",
+        [landowner_id, req.user?.id || 1, `Claude Vision granskade avtalet: Status ${result.status}. ${result.summary}`]
+      );
+    }
+
+    res.json(result);
+  } catch (err) {
+    console.error('Fel vid avtalsgranskning med Claude Vision:', err);
+    res.status(500).json({ error: err.message || 'Kunde inte analysera avtalet.' });
+  }
+});
+
+// 2. Ett-klicks Veckorapport till Nätägare (Vattenfall / Ellevio PM)
+app.post('/api/admin/anthropic/weekly-report/:projectId', authenticateToken, async (req, res) => {
+  const projectId = req.params.projectId;
+
+  try {
+    const project = await new Promise((resolve, reject) => {
+      db.get("SELECT * FROM projects WHERE id = ?", [projectId], (err, row) => err ? reject(err) : resolve(row));
+    });
+    if (!project) return res.status(404).json({ error: 'Projektet hittades inte.' });
+
+    const landowners = await new Promise((resolve, reject) => {
+      db.all("SELECT l.*, (SELECT GROUP_CONCAT(designation, ', ') FROM properties WHERE landowner_id = l.id) as properties_list FROM landowners l WHERE l.project_id = ?", [projectId], (err, rows) => err ? reject(err) : resolve(rows || []));
+    });
+
+    const permits = await new Promise((resolve) => {
+      db.all("SELECT * FROM project_permits WHERE project_id = ?", [projectId], (err, rows) => resolve(rows || []));
+    });
+
+    const report = await anthropicService.generateWeeklyReport({ project, landowners, permits });
+    res.json(report);
+  } catch (err) {
+    console.error('Fel vid veckorapportsgenerering:', err);
+    res.status(500).json({ error: err.message || 'Kunde inte generera rapport.' });
+  }
+});
+
+// 3. Pre-Flight Slutgranskning inför Lantmäteriet & Nätägaren
+app.post('/api/admin/anthropic/audit-project/:projectId', authenticateToken, async (req, res) => {
+  const projectId = req.params.projectId;
+
+  try {
+    const project = await new Promise((resolve, reject) => {
+      db.get("SELECT * FROM projects WHERE id = ?", [projectId], (err, row) => err ? reject(err) : resolve(row));
+    });
+    if (!project) return res.status(404).json({ error: 'Projektet hittades inte.' });
+
+    const landowners = await new Promise((resolve, reject) => {
+      const q = `
+        SELECT l.*,
+          (SELECT GROUP_CONCAT(designation, ', ') FROM properties WHERE landowner_id = l.id) as properties_list,
+          (SELECT compensation_sum FROM land_valuations WHERE landowner_id = l.id) as compensation_sum
+        FROM landowners l WHERE l.project_id = ?
+      `;
+      db.all(q, [projectId], (err, rows) => err ? reject(err) : resolve(rows || []));
+    });
+
+    const permits = await new Promise((resolve) => {
+      db.all("SELECT * FROM project_permits WHERE project_id = ?", [projectId], (err, rows) => resolve(rows || []));
+    });
+
+    const audit = await anthropicService.auditProjectDelivery({ project, landowners, permits });
+    res.json(audit);
+  } catch (err) {
+    console.error('Fel vid pre-flight audit:', err);
+    res.status(500).json({ error: err.message || 'Kunde inte utföra granskning.' });
+  }
+});
+
+// 4. Dödsbo- & Fullmaktsanalys
+app.post('/api/admin/anthropic/analyze-estate', authenticateToken, memoryUpload.single('file'), async (req, res) => {
+  const { property_designation } = req.body;
+
+  try {
+    let imageBuffer = null;
+    let mimeType = 'image/jpeg';
+
+    if (req.file) {
+      imageBuffer = req.file.buffer;
+      mimeType = req.file.mimetype;
+    } else if (req.body.image_base64) {
+      const b64Data = req.body.image_base64.replace(/^data:image\/\w+;base64,/, '');
+      imageBuffer = Buffer.from(b64Data, 'base64');
+      if (req.body.image_base64.includes('image/png')) mimeType = 'image/png';
+    }
+
+    if (!imageBuffer) {
+      return res.status(400).json({ error: 'Ingen bouppteckning eller fullmakt uppladdad.' });
+    }
+
+    const result = await anthropicService.analyzeEstateDocument({
+      imageBuffer,
+      mimeType,
+      propertyDesignation: property_designation || 'Dödsbo-fastighet'
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error('Fel vid bouppteckningsanalys:', err);
+    res.status(500).json({ error: err.message || 'Kunde inte analysera bouppteckningen.' });
+  }
+});
+
+// 5. Administrativ Morgon-Radar (Portfolio Briefing)
+app.get('/api/admin/admin-radar', authenticateToken, async (req, res) => {
+  try {
+    const projects = await new Promise((resolve) => {
+      const q = `
+        SELECT p.*,
+          (SELECT COUNT(*) FROM landowners WHERE project_id = p.id) as total_landowners,
+          (SELECT COUNT(*) FROM landowners WHERE project_id = p.id AND status IN ('signed', 'paid', 'easement')) as signed_landowners
+        FROM projects p
+      `;
+      db.all(q, [], (err, rows) => resolve(rows || []));
+    });
+
+    // Hämta inkomna och pågående returer
+    const pendingReturns = await new Promise((resolve) => {
+      db.all("SELECT id, name, status, project_id FROM landowners WHERE status = 'received' LIMIT 5", [], (err, rows) => resolve(rows || []));
+    });
+
+    const radar = await anthropicService.generatePortfolioRadar({
+      projects,
+      pendingReturns
+    });
+
+    res.json(radar);
+  } catch (err) {
+    console.error('Fel vid hämtning av admin-radar:', err);
+    res.status(500).json({ error: err.message || 'Kunde inte ladda morgon-radar.' });
+  }
+});
+
+// 6. Generera Avtalspaket med Separat Spegelblad och Valbara Förtryckta Rader
+app.get('/api/landowners/:id/agreement-package', authenticateToken, async (req, res) => {
+  const landownerId = req.params.id;
+  const includePreprinted = req.query.include_preprinted === 'true';
+
+  try {
+    const landowner = await new Promise((resolve, reject) => {
+      db.get("SELECT * FROM landowners WHERE id = ?", [landownerId], (err, row) => err || !row ? reject('Markägare hittades inte') : resolve(row));
+    });
+
+    const project = await new Promise((resolve, reject) => {
+      db.get("SELECT * FROM projects WHERE id = ?", [landowner.project_id], (err, row) => err || !row ? reject('Projekt hittades inte') : resolve(row));
+    });
+
+    const properties = await new Promise((resolve) => {
+      db.all("SELECT * FROM properties WHERE landowner_id = ?", [landownerId], (err, rows) => resolve(rows || []));
+    });
+
+    const valuation = await new Promise((resolve) => {
+      db.get("SELECT * FROM land_valuations WHERE landowner_id = ?", [landownerId], (err, row) => resolve(row || { compensation_sum: 0 }));
+    });
+
+    const pdfBuffer = await generateAgreementPackage({
+      project,
+      landowner,
+      properties,
+      valuation,
+      includePreprintedLines: includePreprinted
+    });
+
+    const safeName = (landowner.name || 'Markagare').replace(/[^a-zA-Z0-9åäöÅÄÖ_-]/g, '_');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Avtalspaket_${safeName}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error('Fel vid generering av avtalspaket:', err);
+    res.status(500).json({ error: 'Kunde inte generera avtalspaketet: ' + err });
   }
 });
 

@@ -5,9 +5,11 @@ import Dashboard from './pages/Dashboard';
 import ProjectDetails from './pages/ProjectDetails';
 import LandownerDetails from './pages/LandownerDetails';
 import Templates from './pages/Templates';
-import { LogOut, LayoutDashboard, Layers, Inbox, ShieldAlert, FileText, Search } from 'lucide-react';
+import { LogOut, LayoutDashboard, Layers, Inbox, ShieldAlert, FileText, Search, Sparkles } from 'lucide-react';
 import { useToast } from './components/Toast.jsx';
 import GlobalSearchModal from './components/GlobalSearchModal.jsx';
+import AnthropicConfigModal from './components/AnthropicConfigModal.jsx';
+import AiVisionScanModal from './components/AiVisionScanModal.jsx';
 import { nektabLogoWhiteData } from './assets/logoData.js';
 
 function App() {
@@ -15,6 +17,8 @@ function App() {
   const [user, setUser] = useState(null);
   const { showToast } = useToast();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isAiConfigOpen, setIsAiConfigOpen] = useState(false);
+  const [isAiVisionModalOpen, setIsAiVisionModalOpen] = useState(false);
   
   // Enkel state-baserad router
   const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'projects', 'project', 'landowner', 'templates', 'inbox', 'gdpr'
@@ -463,6 +467,16 @@ function App() {
             <FileText size={18} />
             <span>Mallar</span>
           </button>
+
+          <button 
+            className="sidebar-link"
+            onClick={() => setIsAiConfigOpen(true)}
+            style={{ color: 'var(--color-accent)' }}
+            title="Konfigurera Anthropic API & Claude 3.5 modeller"
+          >
+            <Sparkles size={18} />
+            <span>Claude 3.5 AI</span>
+          </button>
         </div>
 
         <div className="sidebar-footer">
@@ -514,7 +528,42 @@ function App() {
               Skanna, ladda upp och matcha fysiskt påskrivna originalavtal mot markägare i databasen.
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem', marginTop: '2rem' }}>
+            {/* Claude Vision AI Granskning Banner */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '1rem',
+              backgroundColor: 'rgba(95, 200, 145, 0.08)',
+              border: '1px solid rgba(95, 200, 145, 0.25)',
+              padding: '1rem 1.25rem',
+              borderRadius: '8px',
+              marginTop: '1.5rem',
+              flexWrap: 'wrap'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                <div style={{ backgroundColor: 'rgba(95, 200, 145, 0.2)', padding: '0.6rem', borderRadius: '8px' }}>
+                  <Sparkles size={22} style={{ color: 'var(--color-accent)' }} />
+                </div>
+                <div>
+                  <div style={{ color: 'white', fontWeight: 600, fontSize: '0.92rem' }}>
+                    Claude 3.5 Multimodal Avtalsgranskning
+                  </div>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
+                    Automatisk kontroll av fysiska returer: upptäcker felaktiga signaturer i nätägarrutan, saknade delägarnamn och bankkonton.
+                  </div>
+                </div>
+              </div>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => setIsAiVisionModalOpen(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}
+              >
+                <Sparkles size={15} /> Starta Claude AI-analys
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem', marginTop: '1.5rem' }}>
               {/* VÄNSTER SPALT: Ladda upp & OCR-skanna */}
               <div className="card">
                 <h3 className="card-title" style={{ fontSize: '1rem', color: 'white', marginBottom: '1rem', fontFamily: 'var(--font-title)' }}>
@@ -786,6 +835,22 @@ function App() {
         token={token}
         navigateToProject={navigateToProject}
         navigateToLandowner={navigateToLandowner}
+      />
+
+      {/* Claude AI & Anthropic Config Modaler */}
+      <AnthropicConfigModal
+        isOpen={isAiConfigOpen}
+        onClose={() => setIsAiConfigOpen(false)}
+        token={token}
+      />
+
+      <AiVisionScanModal
+        isOpen={isAiVisionModalOpen}
+        onClose={() => setIsAiVisionModalOpen(false)}
+        token={token}
+        onSuccess={() => {
+          if (fetchAllLandowners) fetchAllLandowners();
+        }}
       />
     </div>
   );

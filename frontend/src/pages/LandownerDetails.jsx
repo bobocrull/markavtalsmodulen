@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../config';
 import DocumentOrderList from '../components/DocumentOrderList';
-import { ArrowLeft, Save, Upload, FileText, Send, ShieldAlert, Plus, Trash2, ExternalLink, Edit2, Check, AlertCircle, Sparkles, Calculator, MessageSquare, Calendar, Zap, RefreshCw, FileCheck, CreditCard, Download, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Save, Upload, FileText, Send, ShieldAlert, Plus, Trash2, ExternalLink, Edit2, Check, AlertCircle, Sparkles, Calculator, MessageSquare, Calendar, Zap, RefreshCw, FileCheck, CreditCard, Download, CheckCircle2, Camera, Printer } from 'lucide-react';
 import { useToast } from '../components/Toast.jsx';
+import PrintAgreementPackageModal from '../components/PrintAgreementPackageModal';
+import AiVisionScanModal from '../components/AiVisionScanModal';
 
 function LandownerDetails({ token, landownerId, navigateToProject, user }) {
   const { showToast } = useToast();
@@ -24,6 +26,8 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
   const [phone, setPhone] = useState('');
   const [bankAccount, setBankAccount] = useState('');
   const [status, setStatus] = useState('draft');
+  const [showPrintPackageModal, setShowPrintPackageModal] = useState(false);
+  const [showVisionModal, setShowVisionModal] = useState(false);
 
   // Toggle edit-läge för personuppgifter
   const [isEditing, setIsEditing] = useState(false);
@@ -1001,7 +1005,7 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
       </button>
 
       {/* Profiltitel */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 className="page-title">{owner.name}</h1>
           <p className="page-subtitle" style={{ fontSize: '0.85rem' }}>
@@ -1009,11 +1013,34 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
           </p>
         </div>
         
-        {isPurged && (
-          <span className="badge badge-completed" style={{ fontSize: '0.85rem', padding: '0.4rem 1rem' }}>
-            GDPR-GALLRAD & AVSLUTAD
-          </span>
-        )}
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {!isPurged && (
+            <>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setShowPrintPackageModal(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', borderColor: 'rgba(95, 200, 145, 0.4)', color: 'var(--color-accent)', textTransform: 'none', fontWeight: 600 }}
+                title="Skriv ut avtalspaket med separat spegelblad och valbara förtryckta rader"
+              >
+                <Printer size={15} /> Skriv ut Avtalspaket
+              </button>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setShowVisionModal(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', borderColor: '#2d3e52', color: 'white', textTransform: 'none', fontWeight: 600 }}
+                title="Granska returnerat fysiskt avtal med Claude Vision"
+              >
+                <Camera size={15} style={{ color: 'var(--color-accent)' }} /> Claude Vision (Granska)
+              </button>
+            </>
+          )}
+
+          {isPurged && (
+            <span className="badge badge-completed" style={{ fontSize: '0.85rem', padding: '0.4rem 1rem' }}>
+              GDPR-GALLRAD & AVSLUTAD
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Rekommenderad nästa åtgärd (Next Best Action) */}
@@ -2356,6 +2383,23 @@ function LandownerDetails({ token, landownerId, navigateToProject, user }) {
           </div>
         </div>
       )}
+
+      {/* Modaler fr Avtalspaket och Claude AI Vision */}
+      <PrintAgreementPackageModal
+        isOpen={showPrintPackageModal}
+        onClose={() => setShowPrintPackageModal(false)}
+        token={token}
+        landowner={owner}
+        project={{ name: owner?.project_name, nis_number: owner?.nis_number, network_owner: owner?.network_owner }}
+      />
+
+      <AiVisionScanModal
+        isOpen={showVisionModal}
+        onClose={() => setShowVisionModal(false)}
+        token={token}
+        selectedLandownerId={landownerId}
+        onSuccess={() => fetchOwnerDetails()}
+      />
     </div>
   );
 }

@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../config';
 import MapWidget from '../components/MapWidget';
-import { ArrowLeft, UserPlus, Trash2, FileText, Upload, Plus, Users, Layout, Shield, FileCheck, Layers, ClipboardList, Info, FileSpreadsheet, Download, ArrowUpDown, SlidersHorizontal, CheckCircle2, Zap, CreditCard, RefreshCw } from 'lucide-react';
+import { ArrowLeft, UserPlus, Trash2, FileText, Upload, Plus, Users, Layout, Shield, FileCheck, Layers, ClipboardList, Info, FileSpreadsheet, Download, ArrowUpDown, SlidersHorizontal, CheckCircle2, Zap, CreditCard, RefreshCw, Printer, Sparkles, ShieldCheck } from 'lucide-react';
 import { useToast } from '../components/Toast.jsx';
 import VattenfallImportModal from '../components/VattenfallImportModal';
+import PrintAgreementPackageModal from '../components/PrintAgreementPackageModal';
+import AiWeeklyReportModal from '../components/AiWeeklyReportModal';
+import AiPreFlightAuditModal from '../components/AiPreFlightAuditModal';
 
 function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashboard }) {
   const { showToast } = useToast();
@@ -14,6 +17,10 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
   const [projDocs, setProjDocs] = useState([]);
   const [projectPermits, setProjectPermits] = useState([]);
   const [showVattenfallModal, setShowVattenfallModal] = useState(false);
+  const [showWeeklyReportModal, setShowWeeklyReportModal] = useState(false);
+  const [showPreFlightAuditModal, setShowPreFlightAuditModal] = useState(false);
+  const [showPrintPackageModal, setShowPrintPackageModal] = useState(false);
+  const [selectedLandownerForPrint, setSelectedLandownerForPrint] = useState(null);
 
   // States för formulär / modal
   const [showOwnerModal, setShowOwnerModal] = useState(false);
@@ -812,6 +819,24 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <button 
             className="btn btn-secondary btn-sm"
+            onClick={() => setShowWeeklyReportModal(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', borderColor: '#2d3e52', color: 'white', fontFamily: 'var(--font-body)', textTransform: 'none', fontWeight: 600 }}
+            title="Generera formell lägesrapport till Vattenfall/Ellevios projektledare"
+          >
+            <Sparkles size={14} style={{ color: 'var(--color-accent)' }} /> Veckorapport (PM)
+          </button>
+
+          <button 
+            className="btn btn-secondary btn-sm"
+            onClick={() => setShowPreFlightAuditModal(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', borderColor: '#2d3e52', color: 'white', fontFamily: 'var(--font-body)', textTransform: 'none', fontWeight: 600 }}
+            title="Kör fullständig juridisk pre-flight revision inför Lantmäteriet och arkivering"
+          >
+            <ShieldCheck size={14} style={{ color: '#60a5fa' }} /> Pre-Flight Audit
+          </button>
+
+          <button 
+            className="btn btn-secondary btn-sm"
             onClick={handleExportVattenfall}
             style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', borderColor: 'rgba(95, 200, 145, 0.4)', color: 'var(--color-accent)', fontFamily: 'var(--font-body)', textTransform: 'none', fontWeight: 600 }}
             title="Exportera till Vattenfalls officiella Excel-ark"
@@ -1410,9 +1435,19 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
                         </span>
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        <button className="btn btn-secondary btn-sm" style={{ textTransform: 'none', padding: '0.25rem 0.65rem', fontSize: '0.75rem' }} onClick={() => navigateToLandowner(owner.id)}>
-                          Hantera
-                        </button>
+                        <div style={{ display: 'inline-flex', gap: '0.4rem', justifyContent: 'flex-end' }}>
+                          <button 
+                            className="btn btn-secondary btn-sm" 
+                            style={{ textTransform: 'none', padding: '0.25rem 0.55rem', fontSize: '0.72rem', borderColor: 'rgba(95, 200, 145, 0.4)', color: 'var(--color-accent)' }} 
+                            onClick={() => { setSelectedLandownerForPrint(owner); setShowPrintPackageModal(true); }}
+                            title="Skriv ut avtalspaket med separat spegelblad och valbara förtryckta rader"
+                          >
+                            <Printer size={12} style={{ marginRight: '0.2rem' }} /> Avtalspaket
+                          </button>
+                          <button className="btn btn-secondary btn-sm" style={{ textTransform: 'none', padding: '0.25rem 0.65rem', fontSize: '0.75rem' }} onClick={() => navigateToLandowner(owner.id)}>
+                            Hantera
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -2298,6 +2333,33 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
           showToast('Projektdata uppdaterad från Vattenfall-mall!', 'success');
         }}
       />
+
+      <AiWeeklyReportModal
+        isOpen={showWeeklyReportModal}
+        onClose={() => setShowWeeklyReportModal(false)}
+        token={token}
+        project={project}
+      />
+
+      <AiPreFlightAuditModal
+        isOpen={showPreFlightAuditModal}
+        onClose={() => setShowPreFlightAuditModal(false)}
+        token={token}
+        project={project}
+      />
+
+      {selectedLandownerForPrint && (
+        <PrintAgreementPackageModal
+          isOpen={showPrintPackageModal}
+          onClose={() => {
+            setShowPrintPackageModal(false);
+            setSelectedLandownerForPrint(null);
+          }}
+          token={token}
+          landowner={selectedLandownerForPrint}
+          project={project}
+        />
+      )}
     </div>
   );
 }

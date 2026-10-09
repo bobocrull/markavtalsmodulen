@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../config';
-import { FolderPlus, FileText, Compass, Inbox, ShieldAlert, Check, RefreshCw, Layers, ArrowRight, FileSpreadsheet } from 'lucide-react';
+import { FolderPlus, FileText, Compass, Inbox, ShieldAlert, Check, RefreshCw, Layers, ArrowRight, FileSpreadsheet, Sparkles, Camera } from 'lucide-react';
 import VattenfallImportModal from '../components/VattenfallImportModal';
+import AdminRadarCard from '../components/AdminRadarCard';
+import AnthropicConfigModal from '../components/AnthropicConfigModal';
+import AiVisionScanModal from '../components/AiVisionScanModal';
 
 function Dashboard({ 
   token, 
@@ -19,6 +22,8 @@ function Dashboard({
   const [stats, setStats] = useState({ total_projects: 0, active_projects: 0, overdue: 0, approaching: 0, on_time: 0 });
   const [showModal, setShowModal] = useState(false);
   const [showVattenfallModal, setShowVattenfallModal] = useState(false);
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [showAiVisionModal, setShowAiVisionModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -701,7 +706,45 @@ function Dashboard({
           </p>
         </div>
         
-        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button 
+            className="btn btn-secondary" 
+            style={{ 
+              borderColor: 'rgba(95, 200, 145, 0.4)', 
+              color: 'white', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.45rem',
+              fontFamily: 'var(--font-body)',
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: '0.82rem',
+              letterSpacing: 'normal'
+            }}
+            onClick={() => setShowAiVisionModal(true)}
+            title="Skanna och granska returavtal med Claude Vision"
+          >
+            <Camera size={16} style={{ color: 'var(--color-accent)' }} /> Claude Vision (Skanna)
+          </button>
+          <button 
+            className="btn btn-secondary" 
+            style={{ 
+              borderColor: '#2d3d52', 
+              color: 'var(--text-secondary)', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.4rem',
+              fontFamily: 'var(--font-body)',
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: '0.82rem',
+              letterSpacing: 'normal'
+            }}
+            onClick={() => setShowConfigModal(true)}
+            title="Konfigurera Anthropic API-nyckel"
+          >
+            <Sparkles size={14} style={{ color: 'var(--color-accent)' }} /> AI-Inställningar
+          </button>
           <button 
             className="btn btn-secondary" 
             style={{ 
@@ -753,6 +796,13 @@ function Dashboard({
           {error}
         </div>
       )}
+
+      {/* ADMINISTRATIV MORGON-RADAR (CLAUDE 3.5 SONNET) */}
+      <AdminRadarCard 
+        token={token} 
+        onNavigateToInbox={() => setCurrentView('inbox')}
+        onNavigateToProject={() => setCurrentView('projects')}
+      />
 
       <div className="grid" style={{ marginBottom: '2.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
         <div className="card" onClick={() => setCurrentView('projects')} style={{ display: 'flex', gap: '1rem', alignItems: 'center', padding: '1.25rem', cursor: 'pointer' }}>
@@ -984,6 +1034,19 @@ function Dashboard({
             navigateToProject(newProjectId);
           }
         }}
+      />
+
+      <AnthropicConfigModal
+        isOpen={showConfigModal}
+        onClose={() => setShowConfigModal(false)}
+        token={token}
+      />
+
+      <AiVisionScanModal
+        isOpen={showAiVisionModal}
+        onClose={() => setShowAiVisionModal(false)}
+        token={token}
+        onSuccess={() => fetchProjects()}
       />
     </div>
   );
