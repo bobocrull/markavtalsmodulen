@@ -813,7 +813,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
           <button 
             className="btn btn-secondary btn-sm"
             onClick={handleExportVattenfall}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', borderColor: 'rgba(95, 200, 145, 0.4)', color: 'var(--color-accent)' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', borderColor: 'rgba(95, 200, 145, 0.4)', color: 'var(--color-accent)', fontFamily: 'var(--font-body)', textTransform: 'none', fontWeight: 600 }}
             title="Exportera till Vattenfalls officiella Excel-ark"
           >
             <Download size={14} /> Exportera Vattenfall-mall (.xlsx)
@@ -822,7 +822,7 @@ function ProjectDetails({ token, projectId, navigateToLandowner, navigateToDashb
           <button 
             className="btn btn-secondary btn-sm"
             onClick={() => setShowVattenfallModal(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-body)', textTransform: 'none', fontWeight: 600 }}
             title="Komplettera projektet från Vattenfall Excel/CSV"
           >
             <Upload size={14} /> Komplettera från fil

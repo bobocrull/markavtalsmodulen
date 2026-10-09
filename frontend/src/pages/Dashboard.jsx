@@ -539,13 +539,37 @@ function Dashboard({
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
             <button 
               className="btn btn-secondary" 
-              style={{ borderColor: 'rgba(95, 200, 145, 0.4)', color: 'var(--color-accent)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+              style={{ 
+                borderColor: 'rgba(95, 200, 145, 0.4)', 
+                color: 'var(--color-accent)', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '0.5rem',
+                fontFamily: 'var(--font-body)',
+                textTransform: 'none',
+                fontWeight: 600,
+                fontSize: '0.82rem',
+                letterSpacing: 'normal'
+              }}
               onClick={() => setShowVattenfallModal(true)}
             >
               <FileSpreadsheet size={16} /> Importera Vattenfall-mall
             </button>
-            <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-              <FolderPlus size={18} /> + Skapa Nytt Projekt
+            <button 
+              className="btn btn-primary" 
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '0.5rem',
+                fontFamily: 'var(--font-body)',
+                textTransform: 'none',
+                fontWeight: 600,
+                fontSize: '0.82rem',
+                letterSpacing: 'normal'
+              }}
+              onClick={() => setShowModal(true)}
+            >
+              <FolderPlus size={18} /> Skapa Nytt Projekt
             </button>
           </div>
         </div>
@@ -680,13 +704,37 @@ function Dashboard({
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
           <button 
             className="btn btn-secondary" 
-            style={{ borderColor: 'rgba(95, 200, 145, 0.4)', color: 'var(--color-accent)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            style={{ 
+              borderColor: 'rgba(95, 200, 145, 0.4)', 
+              color: 'var(--color-accent)', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.5rem',
+              fontFamily: 'var(--font-body)',
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: '0.82rem',
+              letterSpacing: 'normal'
+            }}
             onClick={() => setShowVattenfallModal(true)}
           >
             <FileSpreadsheet size={16} /> Importera Vattenfall-mall
           </button>
-          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-            <FolderPlus size={18} /> + Skapa Nytt Projekt
+          <button 
+            className="btn btn-primary" 
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.5rem',
+              fontFamily: 'var(--font-body)',
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: '0.82rem',
+              letterSpacing: 'normal'
+            }}
+            onClick={() => setShowModal(true)}
+          >
+            <FolderPlus size={18} /> Skapa Nytt Projekt
           </button>
         </div>
       </div>

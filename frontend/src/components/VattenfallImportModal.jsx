@@ -159,41 +159,75 @@ export default function VattenfallImportModal({
   };
 
   return (
-    <div className="modal-overlay" style={{ zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div 
+      className="modal-overlay" 
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          handleReset();
+          onClose();
+        }
+      }}
+      style={{ 
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: 'rgba(6, 11, 19, 0.85)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        zIndex: 99999,
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        padding: '1.25rem',
+        boxSizing: 'border-box'
+      }}
+    >
       <div 
         className="modal-content" 
+        onClick={(e) => e.stopPropagation()}
         style={{ 
           maxWidth: previewData ? '1060px' : '620px', 
-          width: '95vw', 
-          maxHeight: '92vh',
+          width: '100%', 
+          maxHeight: '90vh',
           display: 'flex',
           flexDirection: 'column',
-          backgroundColor: '#161c24',
-          border: '1px solid #2a3441',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)'
+          backgroundColor: '#16202c',
+          border: '1px solid #2a3c50',
+          borderRadius: '12px',
+          boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+          fontFamily: 'var(--font-body)',
+          padding: '1.5rem',
+          boxSizing: 'border-box'
         }}
       >
         {/* MODAL HEADER */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: '1.25rem', borderBottom: '1px solid #2a3441' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: '1.25rem', borderBottom: '1px solid #263546' }}>
           <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'center' }}>
-            <div style={{ width: 44, height: 44, borderRadius: '8px', backgroundColor: 'rgba(95, 200, 145, 0.12)', border: '1px solid rgba(95, 200, 145, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-accent)' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '10px', backgroundColor: 'rgba(95, 200, 145, 0.12)', border: '1px solid rgba(95, 200, 145, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-accent)', flexShrink: 0 }}>
               <FileSpreadsheet size={24} />
             </div>
             <div>
-              <h2 style={{ fontSize: '1.15rem', color: 'white', margin: 0, fontFamily: 'var(--font-title)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                {targetProjectId ? 'Uppdatera / Komplettera från Vattenfall-mall' : 'Importera Vattenfall Markägarförteckning'}
-                <span style={{ fontSize: '0.65rem', backgroundColor: '#1e3a2b', color: 'var(--color-accent)', padding: '0.2rem 0.5rem', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <h2 style={{ fontSize: '1.15rem', color: 'white', margin: 0, fontFamily: 'var(--font-body)', fontWeight: 700, textTransform: 'none' }}>
+                  {targetProjectId ? 'Uppdatera / Komplettera från Vattenfall-mall' : 'Importera Vattenfall Markägarförteckning'}
+                </h2>
+                <span style={{ fontSize: '0.68rem', backgroundColor: 'rgba(95, 200, 145, 0.15)', color: 'var(--color-accent)', border: '1px solid rgba(95, 200, 145, 0.3)', padding: '0.2rem 0.55rem', borderRadius: '12px', fontWeight: 600, letterSpacing: 'normal', textTransform: 'none' }}>
                   Vattenfall Eldistribution
                 </span>
-              </h2>
-              <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '0.25rem 0 0 0' }}>
+              </div>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0.3rem 0 0 0', lineHeight: 1.4 }}>
                 Läs in projektfiler direkt (.xlsx, .xls, .csv). Identifierar automatiskt NIS-nr, beredare, fastigheter, EBR-intrång och avtalsstatus.
               </p>
             </div>
           </div>
           <button 
             onClick={() => { handleReset(); onClose(); }} 
-            style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem' }}
+            style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.35rem', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'color 0.15s' }}
+            title="Stäng"
           >
             <X size={20} />
           </button>
@@ -288,12 +322,12 @@ export default function VattenfallImportModal({
               </div>
 
               {/* Mallinformation & tips */}
-              <div style={{ marginTop: '1.5rem', backgroundColor: '#18212c', border: '1px solid #2a3544', borderRadius: '8px', padding: '1rem' }}>
-                <h4 style={{ fontSize: '0.8rem', color: 'white', fontFamily: 'var(--font-title)', margin: '0 0 0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <div style={{ marginTop: '1.25rem', backgroundColor: '#1a232f', border: '1px solid #2b3848', borderRadius: '8px', padding: '1rem 1.25rem' }}>
+                <h4 style={{ fontSize: '0.85rem', color: 'white', fontFamily: 'var(--font-body)', fontWeight: 600, textTransform: 'none', margin: '0 0 0.4rem 0', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
                   <ShieldCheck size={16} style={{ color: 'var(--color-accent)' }} /> 
                   Smidig parallellkörning under testperioden
                 </h4>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
                   Ni kan fortsätta arbeta i Vattenfalls ordinarie Excel-mall och importera den hit med ett klick. Systemet beräknar automatiskt EBR-ersättning per fastighetsägare och kartlägger status. När som helst kan ni exportera ut samma Excel-mall för återrapportering till Vattenfall!
                 </p>
               </div>
@@ -577,7 +611,7 @@ export default function VattenfallImportModal({
               <div style={{ width: 64, height: 64, borderRadius: '50%', backgroundColor: 'rgba(95, 200, 145, 0.15)', border: '2px solid var(--color-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem auto', color: 'var(--color-accent)' }}>
                 <CheckCircle2 size={36} />
               </div>
-              <h3 style={{ fontSize: '1.25rem', color: 'white', fontFamily: 'var(--font-title)', margin: '0 0 0.5rem 0' }}>
+              <h3 style={{ fontSize: '1.25rem', color: 'white', fontFamily: 'var(--font-body)', fontWeight: 700, textTransform: 'none', margin: '0 0 0.5rem 0' }}>
                 Importen slutförd framgångsrikt!
               </h3>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', maxWidth: '480px', margin: '0 auto 1.5rem auto' }}>
@@ -592,7 +626,7 @@ export default function VattenfallImportModal({
                     onClose();
                     if (id && onSuccess) onSuccess(id);
                   }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'var(--font-body)', textTransform: 'none', fontWeight: 600 }}
                 >
                   Öppna Projekt <ArrowRight size={16} />
                 </button>
@@ -602,14 +636,14 @@ export default function VattenfallImportModal({
         </div>
 
         {/* MODAL FOOTER */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '1.25rem', borderTop: '1px solid #2a3441', marginTop: '0.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '1.25rem', borderTop: '1px solid #263546', marginTop: '0.5rem' }}>
           <div>
             {previewData && !importResult && (
               <button 
                 className="btn btn-secondary btn-sm" 
                 onClick={handleReset}
                 disabled={importing}
-                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-body)', textTransform: 'none', fontWeight: 600 }}
               >
                 <RefreshCw size={14} /> Byt fil
               </button>
@@ -621,6 +655,7 @@ export default function VattenfallImportModal({
               className="btn btn-secondary" 
               onClick={() => { handleReset(); onClose(); }}
               disabled={importing}
+              style={{ fontFamily: 'var(--font-body)', textTransform: 'none', fontWeight: 600 }}
             >
               Stäng
             </button>
@@ -630,7 +665,7 @@ export default function VattenfallImportModal({
                 className="btn btn-primary"
                 onClick={handleExecuteImport}
                 disabled={importing || !(customMetadata?.name || previewData.metadata?.name)}
-                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'var(--font-body)', textTransform: 'none', fontWeight: 600 }}
               >
                 {importing ? (
                   <>
